@@ -88,10 +88,6 @@ namespace detail
    template<typename MutexType>
    struct MutexTraitsImpl<MutexType, MutexLevel::UNIQUE>
    {
-      static constexpr auto is_unique{ true };
-      static constexpr auto is_shared{ false };
-      static constexpr auto is_timed{ false };
-
       static void lock(MutexType& mutex)
          noexcept(std::is_nothrow_invocable_v<decltype(&MutexType::lock), MutexType>)
       {
@@ -118,10 +114,6 @@ namespace detail
    struct MutexTraitsImpl<MutexType, MutexLevel::SHARED> :
       public MutexTraitsImpl<MutexType, MutexLevel::UNIQUE>
    {
-      static constexpr auto is_unique{ true };
-      static constexpr auto is_shared{ true };
-      static constexpr auto is_timed{ false };
-
       static void lock_shared(MutexType& mutex)
          noexcept(std::is_nothrow_invocable_v<decltype(&MutexType::lock_shared), MutexType>)
       {
@@ -148,10 +140,6 @@ namespace detail
    struct MutexTraitsImpl<MutexType, MutexLevel::UNIQUE_AND_TIMED> :
       public MutexTraitsImpl<MutexType, MutexLevel::UNIQUE>
    {
-      static constexpr auto is_unique{ true };
-      static constexpr auto is_shared{ false };
-      static constexpr auto is_timed{ true };
-
       template<typename ChronoType>
       static void try_lock_for(MutexType& mutex, ChronoType& timeout)
          noexcept(std::is_nothrow_invocable_v<
@@ -175,13 +163,9 @@ namespace detail
    * @brief Partial specialization for shared, timed lock traits.
    */
    template<typename MutexType>
-   struct MutexTraitsImpl<MutexType, MutexLevel::SHARED_AND_TIMED>
-      : public MutexTraitsImpl<MutexType, MutexLevel::UNIQUE_AND_TIMED>
+   struct MutexTraitsImpl<MutexType, MutexLevel::SHARED_AND_TIMED> :
+      public MutexTraitsImpl<MutexType, MutexLevel::UNIQUE_AND_TIMED>
    {
-      static constexpr auto is_unique{ true };
-      static constexpr auto is_shared{ true };
-      static constexpr auto is_timed{ true };
-
       template<typename ChronoType>
       static void try_lock_shared_for(MutexType& mutex, ChronoType& timeout)
          noexcept(std::is_nothrow_invocable_v<
@@ -206,30 +190,30 @@ namespace detail
       bool SupportsSharedLocking,
       bool SupportsTimedLocking
    >
-   struct TagResolver
+   struct MutexIdentifier
    {
    };
 
    template<>
-   struct TagResolver<true, false, false>
+   struct MutexIdentifier<true, false, false>
    {
       static constexpr auto value = detail::MutexLevel::UNIQUE;
    };
 
    template<>
-   struct TagResolver<true, true, false>
+   struct MutexIdentifier<true, true, false>
    {
       static constexpr auto value = detail::MutexLevel::SHARED;
    };
 
    template<>
-   struct TagResolver<true, false, true>
+   struct MutexIdentifier<true, false, true>
    {
       static constexpr auto value = detail::MutexLevel::UNIQUE_AND_TIMED;
    };
 
    template<>
-   struct TagResolver<true, true, true>
+   struct MutexIdentifier<true, true, true>
    {
       static constexpr auto value = detail::MutexLevel::SHARED_AND_TIMED;
    };
@@ -240,14 +224,14 @@ namespace detail
    template<typename Mutex>
    struct MutexTraits : public MutexTraitsImpl<
       Mutex,
-      TagResolver<
+      MutexIdentifier<
          detail::SupportsUniqueLocking<Mutex>::value,
          detail::SupportsSharedLocking<Mutex>::value,
          detail::SupportsTimedLocking<Mutex>::value
       >::value
    >
    {
-      static constexpr auto Level = TagResolver<
+      static constexpr auto Level = MutexIdentifier<
          detail::SupportsUniqueLocking<Mutex>::value,
          detail::SupportsSharedLocking<Mutex>::value,
          detail::SupportsTimedLocking<Mutex>::value
@@ -340,17 +324,17 @@ public:
    {
       std::cout << "Unlocking..." << std::endl;
 
-      LockPolicyType::unlock(this->m_parent->m_mutex);
+      LockPolicyType::unlock(m_parent->m_mutex);
    }
 
    auto* operator->() noexcept
    {
-      return &this->m_parent->m_data;
+      return &m_parent->m_data;
    }
 
    const auto* operator->() const noexcept
    {
-      return &this->m_parent->m_data;
+      return &m_parent->m_data;
    }
 
 private:
