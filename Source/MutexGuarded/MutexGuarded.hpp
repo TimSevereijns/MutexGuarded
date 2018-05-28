@@ -1,14 +1,15 @@
 #pragma once
 
+#include <iostream>
 #include <mutex>
+#include <shared_mutex>
 #include <type_traits>
 
 namespace detail
 {
    template<
       typename,
-      typename = void
-   >
+      typename = void>
    struct SupportsUniqueLocking : std::false_type
    {
    };
@@ -18,15 +19,13 @@ namespace detail
       MutexType,
       std::void_t<
          decltype(std::declval<MutexType>().lock()),
-         decltype(std::declval<MutexType>().unlock())>
-   > : std::true_type
+         decltype(std::declval<MutexType>().unlock())>> : std::true_type
    {
    };
 
    template<
       typename,
-      typename = void
-   >
+      typename = void>
    struct SupportsSharedLocking : std::false_type
    {
    };
@@ -37,15 +36,13 @@ namespace detail
       std::void_t<
          decltype(std::declval<MutexType>().lock_shared()),
          decltype(std::declval<MutexType>().try_lock_shared()),
-         decltype(std::declval<MutexType>().unlock_shared())>
-   > : std::true_type
+         decltype(std::declval<MutexType>().unlock_shared())>> : std::true_type
    {
    };
 
    template<
       typename,
-      typename = void
-   >
+      typename = void>
    struct SupportsTimedLocking : std::false_type
    {
    };
@@ -55,8 +52,7 @@ namespace detail
       MutexType,
       std::void_t<
          decltype(std::declval<MutexType>().try_lock_for()),
-         decltype(std::declval<MutexType>().try_lock_until())>
-   > : std::true_type
+         decltype(std::declval<MutexType>().try_lock_until())>> : std::true_type
    {
    };
 }
@@ -76,8 +72,7 @@ namespace detail
 {
    template<
       typename MutexType,
-      MutexLevel
-   >
+      MutexLevel>
    struct MutexTraitsImpl
    {
    };
@@ -111,8 +106,8 @@ namespace detail
    * @brief Partial specialization for shared lock traits.
    */
    template<typename MutexType>
-   struct MutexTraitsImpl<MutexType, MutexLevel::SHARED> :
-      public MutexTraitsImpl<MutexType, MutexLevel::UNIQUE>
+   struct MutexTraitsImpl<MutexType, MutexLevel::SHARED> : 
+      MutexTraitsImpl<MutexType, MutexLevel::UNIQUE>
    {
       static void lock_shared(MutexType& mutex)
          noexcept(std::is_nothrow_invocable_v<decltype(&MutexType::lock_shared), MutexType>)
@@ -138,12 +133,12 @@ namespace detail
    */
    template<typename MutexType>
    struct MutexTraitsImpl<MutexType, MutexLevel::UNIQUE_AND_TIMED> :
-      public MutexTraitsImpl<MutexType, MutexLevel::UNIQUE>
+      MutexTraitsImpl<MutexType, MutexLevel::UNIQUE>
    {
       template<typename ChronoType>
       static void try_lock_for(MutexType& mutex, ChronoType& timeout)
          noexcept(std::is_nothrow_invocable_v<
-            decltype(&MutexType::try_lock_for, ChronoType),
+            decltype(&MutexType::try_lock_for), ChronoType,
             MutexType>)
       {
          mutex.try_lock_for(timeout);
@@ -152,7 +147,7 @@ namespace detail
       template<typename ChronoType>
       static bool try_lock_until(MutexType& mutex, ChronoType& timeout)
          noexcept(std::is_nothrow_invocable_v<
-            decltype(&MutexType::try_lock_until, ChronoType),
+            decltype(&MutexType::try_lock_until), ChronoType,
             MutexType>)
       {
          return mutex.try_lock_until(timeout);
@@ -164,12 +159,12 @@ namespace detail
    */
    template<typename MutexType>
    struct MutexTraitsImpl<MutexType, MutexLevel::SHARED_AND_TIMED> :
-      public MutexTraitsImpl<MutexType, MutexLevel::UNIQUE_AND_TIMED>
+      MutexTraitsImpl<MutexType, MutexLevel::UNIQUE_AND_TIMED>
    {
       template<typename ChronoType>
       static void try_lock_shared_for(MutexType& mutex, ChronoType& timeout)
          noexcept(std::is_nothrow_invocable_v<
-            decltype(&MutexType::try_lock_shared_for, ChronoType),
+            decltype(&MutexType::try_lock_shared_for), ChronoType,
             MutexType>)
       {
          mutex.try_lock_shared_for(timeout);
@@ -178,7 +173,7 @@ namespace detail
       template<typename ChronoType>
       static bool try_lock_shared_until(MutexType& mutex, ChronoType& timeout)
          noexcept(std::is_nothrow_invocable_v<
-            decltype(&MutexType::try_lock_shared_until, ChronoType),
+            decltype(&MutexType::try_lock_shared_until), ChronoType,
             MutexType>)
       {
          return mutex.try_lock_shared_until(timeout);
@@ -188,8 +183,7 @@ namespace detail
    template<
       bool SupportsUniqueLocking,
       bool SupportsSharedLocking,
-      bool SupportsTimedLocking
-   >
+      bool SupportsTimedLocking>
    struct MutexIdentifier
    {
    };
@@ -227,15 +221,12 @@ namespace detail
       MutexIdentifier<
          detail::SupportsUniqueLocking<Mutex>::value,
          detail::SupportsSharedLocking<Mutex>::value,
-         detail::SupportsTimedLocking<Mutex>::value
-      >::value
-   >
+         detail::SupportsTimedLocking<Mutex>::value>::value>
    {
       static constexpr auto Level = MutexIdentifier<
          detail::SupportsUniqueLocking<Mutex>::value,
          detail::SupportsSharedLocking<Mutex>::value,
-         detail::SupportsTimedLocking<Mutex>::value
-      >::value;
+         detail::SupportsTimedLocking<Mutex>::value>::value;
 
       using MutexType = Mutex;
    };
@@ -299,16 +290,8 @@ namespace detail
 }
 
 template<
-   typename DataType,
-   typename MutexTraits,
-   detail::MutexLevel
->
-class MutexGuardedImpl;
-
-template<
    typename ParentType,
-   typename LockPolicyType
->
+   typename LockPolicyType>
 class LockProxy
 {
 public:
@@ -347,16 +330,14 @@ private:
 template<
    typename DataType,
    typename MutexTraits,
-   detail::MutexLevel
->
+   detail::MutexLevel>
 class MutexGuardedImpl
 {
 };
 
 template<
    typename DataType,
-   typename MutexTraits
->
+   typename MutexTraits>
 class MutexGuardedImpl<DataType, MutexTraits, detail::MutexLevel::SHARED>
 {
    using ThisType = MutexGuardedImpl<DataType, MutexTraits, detail::MutexLevel::SHARED>;
@@ -367,8 +348,8 @@ class MutexGuardedImpl<DataType, MutexTraits, detail::MutexLevel::SHARED>
    using UniqueLockPolicy = detail::UniqueLockPolicy<MutexTraits>;
    using UniqueLockProxy = LockProxy<ThisType, UniqueLockPolicy>;
 
-   friend class UniqueLockProxy;
-   friend class SharedLockProxy;
+   friend class LockProxy<ThisType, UniqueLockPolicy>;
+   friend class LockProxy<ThisType, SharedPolicy>;
 
 public:
 
@@ -407,8 +388,7 @@ private:
 
 template<
    typename DataType,
-   typename MutexTraits
->
+   typename MutexTraits>
 class MutexGuardedImpl<DataType, MutexTraits, detail::MutexLevel::UNIQUE>
 {
    using ThisType = MutexGuardedImpl<DataType, MutexTraits, detail::MutexLevel::UNIQUE>;
@@ -416,7 +396,7 @@ class MutexGuardedImpl<DataType, MutexTraits, detail::MutexLevel::UNIQUE>
    using UniqueLockPolicy = detail::UniqueLockPolicy<MutexTraits>;
    using UniqueLockProxy = LockProxy<ThisType, UniqueLockPolicy>;
 
-   friend class UniqueLockProxy;
+   friend class LockProxy<ThisType, UniqueLockPolicy>;
 
 public:
 
@@ -455,9 +435,8 @@ private:
 
 template<
    typename DataType,
-   typename MutexType = std::shared_mutex
->
-struct MutexGuarded : public MutexGuardedImpl<
+   typename MutexType = std::shared_mutex>
+class MutexGuarded : public MutexGuardedImpl<
    DataType,
    detail::MutexTraits<MutexType>,
    detail::MutexTraits<MutexType>::Level>
@@ -466,6 +445,8 @@ struct MutexGuarded : public MutexGuardedImpl<
       DataType,
       detail::MutexTraits<MutexType>,
       detail::MutexTraits<MutexType>::Level>;
+
+public:
 
    template<typename ForwardedType>
    MutexGuarded(ForwardedType&& data)
