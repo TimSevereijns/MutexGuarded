@@ -368,6 +368,14 @@ public:
       LockPolicyType::Lock(parent->m_mutex);
    }
 
+   template<typename ChronoType>
+   LockProxy(ParentType* parent, const ChronoType& timeout) : m_parent{ parent }
+   {
+      std::cout << "Locking..." << std::endl;
+
+      LockPolicyType::Lock(parent->m_mutex, timeout);
+   }
+
    ~LockProxy() noexcept
    {
       std::cout << "Unlocking..." << std::endl;
@@ -389,45 +397,6 @@ private:
 
    ParentType* m_parent;
 };
-
-template<
-   typename ParentType,
-   typename LockPolicyType>
-class TimedLockProxy
-{
-public:
-
-   template<typename ChronoType>
-   TimedLockProxy(ParentType* parent, const ChronoType& timeout) : m_parent{ parent }
-   {
-      std::cout << "Locking..." << std::endl;
-
-      LockPolicyType::Lock(parent->m_mutex, timeout);
-   }
-
-   ~TimedLockProxy() noexcept
-   {
-      std::cout << "Unlocking..." << std::endl;
-
-      LockPolicyType::Unlock(m_parent->m_mutex);
-   }
-
-   auto* operator->() noexcept
-   {
-      return &m_parent->m_data;
-   }
-
-   const auto* operator->() const noexcept
-   {
-      return &m_parent->m_data;
-   }
-
-private:
-
-   ParentType * m_parent;
-};
-
-// @todo Need specialization for the timed lock proxy...
 
 template<
    typename DataType,
@@ -542,10 +511,10 @@ class MutexGuardedImpl<DataType, MutexTraits, detail::MutexLevel::UNIQUE_AND_TIM
 {
    using ThisType = MutexGuardedImpl<DataType, MutexTraits, detail::MutexLevel::UNIQUE_AND_TIMED>;
 
-   using TimedUniqueLockPolicy = detail::TimedUniqueLockPolicy<MutexTraits>;
-   using TimedUniqueLockProxy = TimedLockProxy<ThisType, TimedUniqueLockPolicy>;
+   using TimedLockPolicy = detail::TimedUniqueLockPolicy<MutexTraits>;
+   using TimedLockProxy = LockProxy<ThisType, TimedLockPolicy>;
 
-   friend class TimedLockProxy<ThisType, TimedUniqueLockPolicy>;
+   friend class LockProxy<ThisType, TimedLockPolicy>;
 
 public:
 
@@ -557,21 +526,16 @@ public:
    }
 
    template<typename ChronoType>
-   auto TryLockFor(const ChronoType& timeout) -> TimedUniqueLockProxy
+   auto TryLockFor(const ChronoType& timeout) -> TimedLockProxy
    {
       return { this, timeout };
    }
 
    template<typename ChronoType>
-   auto TryLockFor(const ChronoType& timeout) const -> const TimedUniqueLockProxy
+   auto TryLockFor(const ChronoType& timeout) const -> const TimedLockProxy
    {
       return { this, timeout };
    }
-
-   //template<typename DurationType>
-   //auto TryLockUntil(const DurationType& timeout)
-   //{
-   //}
 
 private:
 
