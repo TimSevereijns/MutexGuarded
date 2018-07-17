@@ -40,8 +40,6 @@ namespace detail
    {
    };
 
-   using duration = std::chrono::seconds;
-
    template<
       typename,
       typename = void>
@@ -570,6 +568,11 @@ public:
       return { this, timeout };
    }
 
+   //template<typename DurationType>
+   //auto TryLockUntil(const DurationType& timeout)
+   //{
+   //}
+
 private:
 
    typename MutexTraits::MutexType m_mutex;
@@ -578,7 +581,7 @@ private:
 
 template<
    typename DataType,
-   typename MutexType = std::shared_mutex>
+   typename MutexType = std::mutex>
 class MutexGuarded : public MutexGuardedImpl<
    DataType,
    detail::MutexTraits<MutexType>,
