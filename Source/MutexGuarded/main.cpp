@@ -9,7 +9,9 @@
 
 int main()
 {
-   const auto isTimedLockingSupported = detail::SupportsTimedLocking<boost::recursive_timed_mutex>::value;
+   const auto x = detail::SupportsUniqueLocking<std::timed_mutex>::value;
+   const auto y = detail::SupportsSharedLocking<std::timed_mutex>::value;
+   const auto z = detail::SupportsTimedLocking<std::timed_mutex>::value;
 
    {
       MutexGuarded<std::string, std::mutex> str{ "Testing a std::mutex." };
@@ -42,7 +44,6 @@ int main()
    {
       MutexGuarded<std::string, boost::recursive_timed_mutex> str{ "Testing a boost recursive, timed mutex." };
       std::cout << str.TryLockFor(boost::chrono::seconds{ 1 })->length() << '\n';
-      //str.TryLockUntil(boost::chrono::seconds{ 1 });
    }
 
    return 0;

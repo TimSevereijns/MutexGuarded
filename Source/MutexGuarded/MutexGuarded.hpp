@@ -539,7 +539,7 @@ public:
 
 private:
 
-   typename MutexTraits::MutexType m_mutex;
+   mutable typename MutexTraits::MutexType m_mutex;
    DataType m_data;
 };
 
@@ -568,6 +568,6 @@ public:
    MutexGuarded(MutexGuarded<DataType, MutexType>& other) = delete;
    MutexGuarded<DataType, MutexType>& operator=(MutexGuarded<DataType, MutexType>& other) = delete;
 
-   MutexGuarded(MutexGuarded<DataType, MutexType>&& other) = default;
-   MutexGuarded<DataType, MutexType>& operator=(MutexGuarded<DataType, MutexType>&& other) = default;
+   MutexGuarded(MutexGuarded<DataType, MutexType>&& other) = delete;
+   MutexGuarded<DataType, MutexType>& operator=(MutexGuarded<DataType, MutexType>&& other) = delete;
 };
