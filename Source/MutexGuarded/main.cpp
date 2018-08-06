@@ -21,6 +21,16 @@ int main()
    std::cout << '\n';
 
    {
+      MutexGuarded<std::string, std::mutex> str{ "Testing a std::mutex." };
+      str.WithLockHeld([] (auto& str) noexcept 
+      {
+         std::cout << str.length() << '\n';
+      });
+   }
+
+   std::cout << '\n';
+
+   {
       MutexGuarded<std::string, std::shared_mutex> str{ "Testing a std::shared_mutex." };
       std::cout << str.WriteLock()->length() << '\n';
    }
