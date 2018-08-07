@@ -9,22 +9,19 @@
 
 int main()
 {
-   const auto x = detail::SupportsUniqueLocking<std::timed_mutex>::value;
-   const auto y = detail::SupportsSharedLocking<std::timed_mutex>::value;
-   const auto z = detail::SupportsTimedLocking<std::timed_mutex>::value;
-
    {
-      MutexGuarded<std::string, std::mutex> str{ "Testing a std::mutex." };
+      MutexGuarded<std::string> str{ "Testing a std::mutex." };
       std::cout << str.Lock()->length() << '\n';
    }
 
    std::cout << '\n';
 
    {
-      MutexGuarded<std::string, std::mutex> str{ "Testing a std::mutex." };
-      str.WithLockHeld([] (auto& str) noexcept 
+      MutexGuarded<std::string> str{ "Testing a std::mutex." };
+      const int result = str.WithLockHeld([] (auto& str) noexcept
       {
          std::cout << str.length() << '\n';
+         return 42;
       });
    }
 

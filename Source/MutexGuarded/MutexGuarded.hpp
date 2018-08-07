@@ -55,10 +55,7 @@ namespace detail
       : std::true_type
    {
    };
-}
 
-namespace detail
-{
    enum struct MutexLevel
    {
       UNIQUE,
@@ -66,10 +63,7 @@ namespace detail
       UNIQUE_AND_TIMED,
       SHARED_AND_TIMED
    };
-}
 
-namespace detail
-{
    template<
       typename MutexType,
       MutexLevel>
@@ -137,16 +131,14 @@ namespace detail
    {
       template<typename ChronoType>
       static bool TryLockFor(MutexType& mutex, const ChronoType& timeout)
-         noexcept(std::is_nothrow_invocable_v<
-            decltype(std::declval<MutexType>().try_lock_for(std::declval<ChronoType>()))>)
+         //noexcept(decltype(std::declval<MutexType>().try_lock_for(std::declval<ChronoType>())))
       {
          return mutex.try_lock_for(timeout);
       }
 
       template<typename DurationType>
       static bool TryLockUntil(MutexType& mutex, const DurationType& duration)
-         noexcept(std::is_nothrow_invocable_v<
-            decltype(std::declval<MutexType>().try_lock_until(std::declval<DurationType>()))>)
+         //noexcept(decltype(std::declval<MutexType>().try_lock_shared_for(std::declval<DurationType>())))
       {
          return mutex.try_lock_until(duration);
       }
@@ -162,16 +154,14 @@ namespace detail
    {
       template<typename ChronoType>
       static void TryLockSharedFor(MutexType& mutex, const ChronoType& timeout)
-         noexcept(std::is_nothrow_invocable_v<
-            decltype(std::declval<MutexType>().try_lock_shared_for(std::declval<ChronoType>()))>)
+         //noexcept(decltype(std::declval<MutexType>().try_lock_shared_for(std::declval<ChronoType>())))
       {
          mutex.try_lock_shared_for(timeout);
       }
 
       template<typename DurationType>
       static bool TryLockSharedUntil(MutexType& mutex, const DurationType& duration)
-         noexcept(std::is_nothrow_invocable_v<
-            decltype(std::declval<MutexType>().try_lock_until(std::declval<DurationType>()))>)
+         //noexcept(decltype(std::declval<MutexType>().try_lock_until(std::declval<DurationType>())))
       {
          return mutex.try_lock_shared_until(duration);
       }
@@ -227,10 +217,7 @@ namespace detail
 
       using MutexType = Mutex;
    };
-}
 
-namespace detail
-{
    /**
    * Function mapping:
    *
@@ -364,6 +351,28 @@ namespace detail
          MutexTraits::UnlockShared(mutex);
       }
    };
+
+   template<typename LockPolicyType>
+   class ScopedLock
+   {
+      using MutexType = typename LockPolicyType::TraitType::MutexType;
+
+   public:
+
+      ScopedLock(MutexType& mutex) : m_mutex{ mutex }
+      {
+         LockPolicyType::Lock(m_mutex);
+      }
+
+      ~ScopedLock() noexcept
+      {
+         LockPolicyType::Unlock(m_mutex);
+      }
+
+   private:
+
+      MutexType& m_mutex;
+   };
 }
 
 template<
@@ -403,31 +412,6 @@ private:
 
    ParentType* m_parent;
 };
-
-namespace detail
-{
-   template<typename LockPolicyType>
-   class ScopedLock
-   {
-      using MutexType = typename LockPolicyType::TraitType::MutexType;
-
-   public:
-
-      ScopedLock(MutexType& mutex) : m_mutex{ mutex }
-      {
-         LockPolicyType::Lock(m_mutex);
-      }
-
-      ~ScopedLock()
-      {
-         LockPolicyType::Unlock(m_mutex);
-      }
-
-   private:
-
-      MutexType& m_mutex;
-   };
-}
 
 template<
    typename DataType,
@@ -483,13 +467,13 @@ public:
       noexcept(std::is_nothrow_invocable_v<CallableType, DataType>)
    {
       static_assert(
-         std::is_invocable_v<CallableType, const DataType&>,
-         "The function (or lambda) must be of the form: void fn(DataType&).");
+         std::is_invocable_v<CallableType, DataType&>,
+         "The function (or lambda) must taken a DataType& as input.");
 
       using PolicyType = detail::UniqueLockPolicy<MutexTraits>;
       const detail::ScopedLock<PolicyType> lock{ m_mutex };
 
-      callable(m_data);
+      return callable(m_data);
    }
 
 private:
