@@ -5,7 +5,12 @@
 namespace detail
 {
    template<>
-   struct SupportsTimedLocking<boost::recursive_timed_mutex, void> : std::true_type
+   struct supports_unique_locking<boost::recursive_timed_mutex> : std::true_type
+   {
+   };
+
+   template<>
+   struct supports_timed_locking<boost::recursive_timed_mutex> : std::true_type
    {
    };
 }
