@@ -7,6 +7,8 @@
 
 #include <shared_mutex>
 
+#include <boost/thread/recursive_mutex.hpp>
+
 namespace detail
 {
    namespace global
@@ -15,82 +17,80 @@ namespace detail
       {
          bool was_locked = false;
          bool was_unlocked = false;
-      } state_tracker;
+      } tracker;
    }
 
-   template<typename MutexType>
+   template<
+      typename MutexType,
+      typename TagType>
    class testing_wrapper
    {
    };
 
-   template<>
-   class testing_wrapper<std::mutex>
+   template<typename MutexType>
+   class testing_wrapper<MutexType, detail::tag::unique>
    {
-      using mutex_type = std::mutex;
-
    public:
 
       testing_wrapper()
       {
-         global::state_tracker.was_locked = false;
-         global::state_tracker.was_unlocked = false;
+         global::tracker.was_locked = false;
+         global::tracker.was_unlocked = false;
       }
 
-      auto lock() -> decltype(std::declval<mutex_type>().lock())
+      auto lock() -> decltype(std::declval<MutexType>().lock())
       {
-         global::state_tracker.was_locked = true;
+         global::tracker.was_locked = true;
          m_mutex.lock();
       }
 
-      auto try_lock() -> decltype(std::declval<mutex_type>().try_lock())
+      auto try_lock() -> decltype(std::declval<MutexType>().try_lock())
       {
          m_mutex.try_lock();
       }
 
-      auto unlock() -> decltype(std::declval<mutex_type>().unlock())
+      auto unlock() -> decltype(std::declval<MutexType>().unlock())
       {
-         global::state_tracker.was_unlocked = true;
+         global::tracker.was_unlocked = true;
          m_mutex.unlock();
       }
 
    private:
 
-      mutable std::mutex m_mutex;
+      mutable MutexType m_mutex;
    };
 
-   template<>
-   class testing_wrapper<std::shared_mutex>
+   template<typename MutexType>
+   class testing_wrapper<MutexType, detail::tag::shared>
    {
-      using mutex_type = std::shared_mutex;
-
    public:
 
       testing_wrapper()
       {
-         global::state_tracker.was_locked = false;
-         global::state_tracker.was_unlocked = false;
+         global::tracker.was_locked = false;
+         global::tracker.was_unlocked = false;
       }
 
-      auto lock_shared() -> decltype(std::declval<mutex_type>().lock_shared())
+      auto lock_shared() -> decltype(std::declval<MutexType>().lock_shared())
       {
-         global::state_tracker.was_locked = true;
+         global::tracker.was_locked = true;
          m_mutex.lock_shared();
       }
 
-      auto try_lock_shared() -> decltype(std::declval<mutex_type>().try_lock_shared())
+      auto try_lock_shared() -> decltype(std::declval<MutexType>().try_lock_shared())
       {
          m_mutex.try_lock_shared();
       }
 
-      auto unlock_shared() -> decltype(std::declval<mutex_type>().unlock_shared())
+      auto unlock_shared() -> decltype(std::declval<MutexType>().unlock_shared())
       {
-         global::state_tracker.was_unlocked = true;
+         global::tracker.was_unlocked = true;
          m_mutex.unlock_shared();
       }
 
    private:
 
-      mutable std::shared_mutex m_mutex;
+      mutable MutexType m_mutex;
    };
 }
 
@@ -102,32 +102,67 @@ TEST_CASE("Trait Detection")
       REQUIRE(detail::supports_shared_locking<std::mutex>::value == false);
       REQUIRE(detail::supports_timed_locking<std::mutex>::value == false);
    }
+
+   SECTION("Locking capabilities of boost::recursive_mutex", "[Boost]")
+   {
+      REQUIRE(detail::supports_unique_locking<boost::recursive_mutex>::value == true);
+      REQUIRE(detail::supports_shared_locking<boost::recursive_mutex>::value == false);
+      REQUIRE(detail::supports_timed_locking<boost::recursive_mutex>::value == false);
+   }
 }
 
 TEST_CASE("Guarded with a std::mutex", "[Std]")
 {
-   mutex_guarded<std::string, detail::testing_wrapper<std::mutex>> data{ "Testing a std::mutex." };
+   using mutex_type = detail::testing_wrapper<std::mutex, detail::tag::unique>;
+   mutex_guarded<std::string, mutex_type> data{ "Testing a std::mutex." };
 
    SECTION("Locking")
    {
-      REQUIRE(detail::global::state_tracker.was_locked == false);
-      REQUIRE(detail::global::state_tracker.was_unlocked == false);
+      REQUIRE(detail::global::tracker.was_locked == false);
+      REQUIRE(detail::global::tracker.was_unlocked == false);
 
       REQUIRE(*data.lock() == "Testing a std::mutex.");
 
-      REQUIRE(detail::global::state_tracker.was_locked == true);
-      REQUIRE(detail::global::state_tracker.was_unlocked == true);
+      REQUIRE(detail::global::tracker.was_locked == true);
+      REQUIRE(detail::global::tracker.was_unlocked == true);
    }
 
    SECTION("Accessing data")
    {
-      REQUIRE(detail::global::state_tracker.was_locked == false);
-      REQUIRE(detail::global::state_tracker.was_unlocked == false);
+      REQUIRE(detail::global::tracker.was_locked == false);
+      REQUIRE(detail::global::tracker.was_unlocked == false);
 
       REQUIRE(data.lock()->length() == std::string{ "Testing a std::mutex." }.length());
 
-      REQUIRE(detail::global::state_tracker.was_locked == true);
-      REQUIRE(detail::global::state_tracker.was_unlocked == true);
+      REQUIRE(detail::global::tracker.was_locked == true);
+      REQUIRE(detail::global::tracker.was_unlocked == true);
    }
 }
 
+TEST_CASE("Guarded with a boost::recursive_mutex", "[Boost]")
+{
+   using mutex_type = detail::testing_wrapper<boost::recursive_mutex, detail::tag::unique>;
+   mutex_guarded<std::string, mutex_type> data{ "Testing a boost::recursive_mutex." };
+
+   SECTION("Locking")
+   {
+      REQUIRE(detail::global::tracker.was_locked == false);
+      REQUIRE(detail::global::tracker.was_unlocked == false);
+
+      REQUIRE(*data.lock() == "Testing a boost::recursive_mutex.");
+
+      REQUIRE(detail::global::tracker.was_locked == true);
+      REQUIRE(detail::global::tracker.was_unlocked == true);
+   }
+
+   SECTION("Accessing data")
+   {
+      REQUIRE(detail::global::tracker.was_locked == false);
+      REQUIRE(detail::global::tracker.was_unlocked == false);
+
+      REQUIRE(data.lock()->length() == std::string{ "Testing a boost::recursive_mutex." }.length());
+
+      REQUIRE(detail::global::tracker.was_locked == true);
+      REQUIRE(detail::global::tracker.was_unlocked == true);
+   }
+}
