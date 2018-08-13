@@ -1,6 +1,6 @@
 #pragma once
 
-#include "MutexGuarded.hpp"
+#include "mutex_guarded.hpp"
 
 namespace detail
 {

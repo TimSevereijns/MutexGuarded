@@ -4,7 +4,7 @@
 #include <mutex>
 #include <type_traits>
 
-#include "nonstd.hpp"
+#include "future_std.hpp"
 
 namespace detail
 {
@@ -18,7 +18,7 @@ namespace detail
    template<typename MutexType>
    struct supports_unique_locking<
       MutexType,
-      nonstd::std17::void_t<
+      future_std::std17::void_t<
          decltype(std::declval<MutexType>().lock()),
          decltype(std::declval<MutexType>().unlock())>> : std::true_type
    {
@@ -34,7 +34,7 @@ namespace detail
    template<typename MutexType>
    struct supports_shared_locking<
       MutexType,
-      nonstd::std17::void_t<
+      future_std::std17::void_t<
          decltype(std::declval<MutexType>().lock_shared()),
          decltype(std::declval<MutexType>().try_lock_shared()),
          decltype(std::declval<MutexType>().unlock_shared())>> : std::true_type
@@ -51,7 +51,7 @@ namespace detail
    template<typename MutexType>
    struct supports_timed_locking<
       MutexType,
-      nonstd::std17::void_t<
+      future_std::std17::void_t<
          decltype(std::declval<MutexType>().try_lock_for(std::declval<std::chrono::seconds>()))>>
       : std::true_type
    {
@@ -218,19 +218,15 @@ namespace detail
    template<typename MutexTraits>
    struct unique_lock_policy
    {
-      using trait_type = MutexTraits;
-
       template<typename MutexType>
       static void lock(MutexType& mutex)
       {
-         //std::cout << "Locking unique mutex..." << std::endl;
          MutexTraits::lock(mutex);
       }
 
       template<typename MutexType>
       static void unlock(MutexType& mutex)
       {
-         //std::cout << "Unlocking unique mutex..." << std::endl;
          MutexTraits::unlock(mutex);
       }
    };
@@ -244,8 +240,6 @@ namespace detail
    template<typename MutexTraits>
    struct shared_lock_policy
    {
-      using trait_type = MutexTraits;
-
       template<typename MutexType>
       static void lock(MutexType& mutex)
       {
@@ -254,7 +248,6 @@ namespace detail
             "The SharedLockPolicy expects to operate on a mutex that supports the SharedMutex "
             "Concept.");
 
-         //std::cout << "Locking shared mutex..." << std::endl;
          MutexTraits::lock_shared(mutex);
       }
 
@@ -266,7 +259,6 @@ namespace detail
             "The SharedLockPolicy expects to operate on a mutex that supports the SharedMutex "
             "Concept.");
 
-         //std::cout << "Unlocking shared mutex..." << std::endl;
          MutexTraits::unlock_shared(mutex);
       }
    };
@@ -280,8 +272,6 @@ namespace detail
    template<typename MutexTraits>
    struct timed_unique_lock_policy
    {
-      using trait_type = MutexTraits;
-
       template<
          typename MutexType,
          typename ChronoType>
@@ -292,7 +282,6 @@ namespace detail
             "The SharedTimedLockPolicy expects to operate on a mutex that supports the TimedMutex "
             "Concept.");
 
-         //std::cout << "Locking unique, timed mutex..." << std::endl;
          MutexTraits::try_lock_for(mutex, timeout);
       }
 
@@ -304,7 +293,6 @@ namespace detail
             "The SharedTimedLockPolicy expects to operate on a mutex that supports the TimedMutex "
             "Concept.");
 
-         //std::cout << "Unlocking unique, timed mutex..." << std::endl;
          MutexTraits::unlock(mutex);
       }
    };
@@ -351,6 +339,14 @@ class lock_proxy
 {
 public:
 
+   using value_type = typename ParentType::value_type;
+
+   using pointer = typename ParentType::value_type*;
+   using const_pointer = const typename ParentType::value_type*;
+
+   using reference = typename ParentType::value_type&;
+   using const_reference = const typename ParentType::value_type&;
+
    lock_proxy(ParentType* parent) : m_parent{ parent }
    {
       LockPolicyType::lock(parent->m_mutex);
@@ -367,19 +363,29 @@ public:
       LockPolicyType::unlock(m_parent->m_mutex);
    }
 
-   auto operator->() noexcept -> typename ParentType::value_type*
+   auto operator->() noexcept -> pointer
    {
       return &m_parent->m_data;
    }
 
-   auto operator->() const noexcept -> const typename ParentType::value_type*
+   auto operator->() const noexcept -> const_pointer
    {
       return &m_parent->m_data;
+   }
+
+   auto operator*() noexcept -> reference
+   {
+      return m_parent->m_data;
+   }
+
+   auto operator*() const noexcept -> const_reference
+   {
+      return m_parent->m_data;
    }
 
 private:
 
-   ParentType* m_parent;
+   mutable ParentType* m_parent;
 };
 
 template<
@@ -413,19 +419,23 @@ public:
    {
    }
 
-   auto operator->() -> unique_lock_proxy {
+   auto operator->() -> unique_lock_proxy
+   {
       return { this };
    }
 
-   auto operator->() const -> const unique_lock_proxy {
+   auto operator->() const -> const unique_lock_proxy
+   {
       return { this };
    }
 
-   auto lock() -> unique_lock_proxy {
+   auto lock() -> unique_lock_proxy
+   {
       return { this };
    }
 
-   auto lock() const -> const unique_lock_proxy {
+   auto lock() const -> const unique_lock_proxy
+   {
       return { this };
    }
 
@@ -439,7 +449,7 @@ public:
 
 private:
 
-   typename MutexTraits::mutex_type m_mutex;
+   mutable typename MutexTraits::mutex_type m_mutex;
    DataType m_data;
 };
 
@@ -541,7 +551,7 @@ public:
 
    template<typename CallableType>
    auto with_read_lock_held(CallableType&& callable)
-      -> decltype(std::declval<CallableType>().operator()(std::declval<DataType&>()))
+      -> decltype(std::declval<CallableType>().operator()(std::declval<const DataType&>()))
    {
       const auto guard = read_lock();
       return callable(m_data);

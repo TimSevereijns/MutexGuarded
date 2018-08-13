@@ -1,6 +1,6 @@
 #pragma once
 
-namespace nonstd
+namespace future_std
 {
    namespace std17
    {

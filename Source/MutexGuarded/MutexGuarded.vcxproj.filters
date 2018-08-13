@@ -20,13 +20,16 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="MutexGuarded.hpp">
+    <ClInclude Include="mutex_guarded.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="BoostTraits.hpp">
+    <ClInclude Include="boost_mutex_traits.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="nonstd.hpp">
+    <ClInclude Include="future_std.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="unit_tests.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
