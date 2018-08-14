@@ -582,6 +582,7 @@ class mutex_guarded : public detail::mutex_guarded_base<DataType, MutexType>
 public:
 
    using value_type = DataType;
+   using reference = DataType&;
 
    template<typename ForwardedType>
    mutex_guarded(ForwardedType&& data) :
