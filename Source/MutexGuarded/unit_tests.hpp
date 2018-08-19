@@ -18,25 +18,27 @@ namespace detail
          bool was_locked = false;
          bool was_unlocked = false;
       } tracker;
+
+      void reset_tracker() noexcept
+      {
+         tracker.was_locked = false;
+         tracker.was_unlocked = false;
+      }
    }
 
    template<
       typename MutexType,
       typename TagType>
-   class testing_wrapper
+   class wrapped_mutex
    {
    };
 
    template<typename MutexType>
-   class testing_wrapper<MutexType, detail::tag::unique>
+   class wrapped_mutex<MutexType, detail::tag::unique>
    {
    public:
 
-      testing_wrapper()
-      {
-         global::tracker.was_locked = false;
-         global::tracker.was_unlocked = false;
-      }
+      wrapped_mutex() = default;
 
       auto lock() -> decltype(std::declval<MutexType>().lock())
       {
@@ -61,15 +63,11 @@ namespace detail
    };
 
    template<typename MutexType>
-   class testing_wrapper<MutexType, detail::tag::shared>
+   class wrapped_mutex<MutexType, detail::tag::shared>
    {
    public:
 
-      testing_wrapper()
-      {
-         global::tracker.was_locked = false;
-         global::tracker.was_unlocked = false;
-      }
+      wrapped_mutex() = default;
 
       auto lock_shared() -> decltype(std::declval<MutexType>().lock_shared())
       {
@@ -109,14 +107,48 @@ TEST_CASE("Trait Detection")
       REQUIRE(detail::supports_shared_locking<boost::recursive_mutex>::value == false);
       REQUIRE(detail::supports_timed_locking<boost::recursive_mutex>::value == false);
    }
+
+   SECTION("Unique locking should always be possible")
+   {
+      // @todo Use SFINAE to detect lock() functionality on all mutex categories.
+   }
 }
 
 TEST_CASE("Simple sanity checks")
 {
    SECTION("Verifying type-definition")
    {
-      REQUIRE(std::is_same_v<mutex_guarded<std::string, std::mutex>::value_type, std::string>);
-      REQUIRE(std::is_same_v<mutex_guarded<std::string, std::mutex>::reference, std::string&>);
+      REQUIRE(std::is_same_v<
+         mutex_guarded<std::string>::value_type,
+         std::string>);
+
+      REQUIRE(std::is_same_v<
+         mutex_guarded<std::string>::reference,
+         std::string&>);
+
+      REQUIRE(std::is_same_v<
+         mutex_guarded<std::string>::const_reference,
+         const std::string&>);
+
+      REQUIRE(std::is_same_v<
+         lock_proxy<mutex_guarded<std::string>, detail::tag::unique>::value_type,
+         std::string>);
+
+      REQUIRE(std::is_same_v<
+         lock_proxy<mutex_guarded<std::string>, detail::tag::unique>::pointer,
+         std::string*>);
+
+      REQUIRE(std::is_same_v<
+         lock_proxy<mutex_guarded<std::string>, detail::tag::unique>::const_pointer,
+         const std::string*>);
+
+      REQUIRE(std::is_same_v<
+         lock_proxy<mutex_guarded<std::string>, detail::tag::unique>::reference,
+         std::string&>);
+
+      REQUIRE(std::is_same_v<
+         lock_proxy<mutex_guarded<std::string>, detail::tag::unique>::const_reference,
+         const std::string&>);
    }
 }
 
@@ -124,8 +156,10 @@ TEST_CASE("Guarded with a std::mutex", "[Std]")
 {
    const std::string sample = "Testing a std::mutex.";
 
-   using mutex_type = detail::testing_wrapper<std::mutex, detail::tag::unique>;
+   using mutex_type = detail::wrapped_mutex<std::mutex, detail::tag::unique>;
    mutex_guarded<std::string, mutex_type> data{ sample };
+
+   detail::global::reset_tracker();
 
    SECTION("Locking")
    {
@@ -170,8 +204,10 @@ TEST_CASE("Guarded with a boost::recursive_mutex", "[Boost]")
 {
    const std::string sample = "Testing a boost::recursive_mutex.";
 
-   using mutex_type = detail::testing_wrapper<boost::recursive_mutex, detail::tag::unique>;
+   using mutex_type = detail::wrapped_mutex<boost::recursive_mutex, detail::tag::unique>;
    mutex_guarded<std::string, mutex_type> data{ sample };
+
+   detail::global::reset_tracker();
 
    SECTION("Locking")
    {
@@ -208,6 +244,45 @@ TEST_CASE("Guarded with a boost::recursive_mutex", "[Boost]")
       });
 
       REQUIRE(length == sample.length());
+      REQUIRE(detail::global::tracker.was_unlocked == true);
+   }
+}
+
+TEST_CASE("Moves and Copies")
+{
+   const std::string sample = "Testing a std::mutex.";
+
+   using mutex_type = detail::wrapped_mutex<std::mutex, detail::tag::unique>;
+   mutex_guarded<std::string, mutex_type> data{ sample };
+
+   detail::global::reset_tracker();
+
+   SECTION("Copy-assignment")
+   {
+      auto copy = data;
+
+      REQUIRE(detail::global::tracker.was_locked == true);
+      REQUIRE(detail::global::tracker.was_unlocked == true);
+
+      detail::global::reset_tracker();
+
+      REQUIRE(copy.lock()->length() == sample.length());
+
+      REQUIRE(detail::global::tracker.was_locked == true);
+      REQUIRE(detail::global::tracker.was_unlocked == true);
+   }
+
+   SECTION("Move-assignment")
+   {
+      auto copy = std::move(data);
+
+      // Moving should not require locking:
+      REQUIRE(detail::global::tracker.was_locked == false);
+      REQUIRE(detail::global::tracker.was_unlocked == false);
+
+      REQUIRE(copy.lock()->length() == sample.length());
+
+      REQUIRE(detail::global::tracker.was_locked == true);
       REQUIRE(detail::global::tracker.was_unlocked == true);
    }
 }

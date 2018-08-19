@@ -341,11 +341,16 @@ public:
 
    using value_type = typename ParentType::value_type;
 
-   using pointer = typename ParentType::value_type*;
-   using const_pointer = const typename ParentType::value_type*;
+   using pointer = value_type*;
+   using const_pointer = const value_type*;
 
-   using reference = typename ParentType::value_type&;
-   using const_reference = const typename ParentType::value_type&;
+   using reference = value_type&;
+   using const_reference = const value_type&;
+
+   lock_proxy(const ParentType* parent) : m_parent{ parent }
+   {
+      LockPolicyType::lock(parent->m_mutex);
+   }
 
    lock_proxy(ParentType* parent) : m_parent{ parent }
    {
@@ -388,179 +393,139 @@ private:
    mutable ParentType* m_parent;
 };
 
+template<typename DataType, typename MutexType>
+class mutex_guarded;
+
 template<
+   typename SubclassType,
+   typename MutexType,
    typename DataType,
-   typename MutexTraits,
    typename TagType>
 class mutex_guarded_impl
 {
 };
 
 template<
+   typename SubclassType,
    typename DataType,
-   typename MutexTraits>
-class mutex_guarded_impl<DataType, MutexTraits, detail::tag::unique>
+   typename MutexType>
+class mutex_guarded_impl<SubclassType, DataType, MutexType, detail::tag::unique>
 {
-private:
-
-   using value_type = DataType;
-   using this_type = mutex_guarded_impl<DataType, MutexTraits, detail::tag::unique>;
-
-   using unique_lock_policy = detail::unique_lock_policy<MutexTraits>;
-   using unique_lock_proxy = lock_proxy<this_type, unique_lock_policy>;
-
-   friend class lock_proxy<this_type, unique_lock_policy>;
-
 public:
 
-   template<typename ForwardedType>
-   mutex_guarded_impl(ForwardedType&& data) :
-      m_data{ std::forward<decltype(data)>(data) }
-   {
-   }
+   using mutex_traits = detail::mutex_traits<MutexType>;
+   using unique_lock_policy = detail::unique_lock_policy<mutex_traits>;
+   using unique_lock_proxy = lock_proxy<SubclassType, unique_lock_policy>;
 
    auto operator->() -> unique_lock_proxy
    {
-      return { this };
+      return { static_cast<SubclassType*>(this) };
    }
 
    auto operator->() const -> const unique_lock_proxy
    {
-      return { this };
+      return { static_cast<const SubclassType*>(this) };
    }
 
    auto lock() -> unique_lock_proxy
    {
-      return { this };
+      return { static_cast<SubclassType*>(this) };
    }
 
    auto lock() const -> const unique_lock_proxy
    {
-      return { this };
+      return { static_cast<const SubclassType*>(this) };
    }
 
    template<typename CallableType>
    auto with_lock_held(CallableType&& callable)
       -> decltype(std::declval<CallableType>().operator()(std::declval<DataType&>()))
    {
-      const auto guard = lock();
-      return callable(m_data);
+      const auto scopedGuard = lock();
+      return callable(static_cast<SubclassType*>(this)->m_data);
    }
-
-private:
-
-   mutable typename MutexTraits::mutex_type m_mutex;
-   DataType m_data;
 };
 
 template<
+   typename SubclassType,
    typename DataType,
-   typename MutexTraits>
-class mutex_guarded_impl<DataType, MutexTraits, detail::tag::unique_and_timed>
+   typename MutexType>
+class mutex_guarded_impl<SubclassType, DataType, MutexType, detail::tag::unique_and_timed>
 {
-private:
-
-   using value_type = DataType;
-   using this_type = mutex_guarded_impl<DataType, MutexTraits, detail::tag::unique_and_timed>;
-
-   using timed_lock_policy = detail::timed_unique_lock_policy<MutexTraits>;
-   using timed_lock_proxy = lock_proxy<this_type, timed_lock_policy>;
-
-   friend class lock_proxy<this_type, timed_lock_policy>;
-
 public:
 
-   template<typename ForwardedType>
-   mutex_guarded_impl(ForwardedType&& data) :
-      m_data{ std::forward<decltype(data)>(data) }
-   {
-   }
+   using mutex_traits = detail::mutex_traits<MutexType>;
+
+   using timed_lock_policy = detail::timed_unique_lock_policy<mutex_traits>;
+   using timed_lock_proxy = lock_proxy<SubclassType, timed_lock_policy>;
+
+   using unique_lock_policy = detail::unique_lock_policy<mutex_traits>;
+   using unique_lock_proxy = lock_proxy<SubclassType, unique_lock_policy>;
 
    template<typename ChronoType>
    auto try_lock_for(const ChronoType& timeout) -> timed_lock_proxy
    {
-      return { this, timeout };
+      return { static_cast<SubclassType*>(this), timeout };
    }
 
    template<typename ChronoType>
    auto try_lock_for(const ChronoType& timeout) const -> const timed_lock_proxy
    {
-      return { this, timeout };
+      return { static_cast<SubclassType*>(this), timeout };
    }
-
-private:
-
-   mutable typename MutexTraits::mutex_type m_mutex;
-   DataType m_data;
 };
 
 template<
+   typename SubclassType,
    typename DataType,
-   typename MutexTraits>
-class mutex_guarded_impl<DataType, MutexTraits, detail::tag::shared>
+   typename MutexType>
+class mutex_guarded_impl<SubclassType, DataType, MutexType, detail::tag::shared>
 {
-private:
-
-   using value_type = DataType;
-   using this_type = mutex_guarded_impl<DataType, MutexTraits, detail::tag::shared>;
-
-   using shared_lock_policy = detail::shared_lock_policy<MutexTraits>;
-   using shared_lock_proxy = lock_proxy<this_type, shared_lock_policy>;
-
-   using unique_lock_policy = detail::unique_lock_policy<MutexTraits>;
-   using unique_lock_proxy = lock_proxy<this_type, unique_lock_policy>;
-
-   friend class lock_proxy<this_type, unique_lock_policy>;
-   friend class lock_proxy<this_type, shared_lock_policy>;
-
 public:
 
-   template<typename ForwardedType>
-   mutex_guarded_impl(ForwardedType&& data) :
-      m_data{ std::forward<decltype(data)>(data) }
-   {
-   }
+   using mutex_traits = detail::mutex_traits<MutexType>;
+
+   using shared_lock_policy = detail::shared_lock_policy<mutex_traits>;
+   using shared_lock_proxy = lock_proxy<SubclassType, shared_lock_policy>;
+
+   using unique_lock_policy = detail::unique_lock_policy<mutex_traits>;
+   using unique_lock_proxy = lock_proxy<SubclassType, unique_lock_policy>;
 
    auto write_lock() -> unique_lock_proxy
    {
-      return { this };
+      return { static_cast<SubclassType*>(this) };
    }
 
    auto write_lock() const -> const unique_lock_proxy
    {
-      return { this };
+      return { static_cast<SubclassType*>(this) };
    }
 
    auto read_lock() -> shared_lock_proxy
    {
-      return { this };
+      return { static_cast<SubclassType*>(this) };
    }
 
    auto read_lock() const -> const shared_lock_proxy
    {
-      return { this };
+      return { static_cast<SubclassType*>(this) };
    }
 
    template<typename CallableType>
    auto with_write_lock_held(CallableType&& callable)
       -> decltype(std::declval<CallableType>().operator()(std::declval<DataType&>()))
    {
-      const auto guard = write_lock();
-      return callable(m_data);
+      const auto scopedGuard = write_lock();
+      return callable(this->m_data);
    }
 
    template<typename CallableType>
    auto with_read_lock_held(CallableType&& callable)
       -> decltype(std::declval<CallableType>().operator()(std::declval<const DataType&>()))
    {
-      const auto guard = read_lock();
-      return callable(m_data);
+      const auto scopedGuard = read_lock();
+      return callable(this->m_data);
    }
-
-private:
-
-   typename MutexTraits::mutex_type m_mutex;
-   DataType m_data;
 };
 
 namespace detail
@@ -569,8 +534,9 @@ namespace detail
       typename DataType,
       typename MutexType>
    using mutex_guarded_base = mutex_guarded_impl<
+      mutex_guarded<DataType, MutexType>,
       DataType,
-      detail::mutex_traits<MutexType>,
+      MutexType,
       typename detail::mutex_traits<MutexType>::tag_type>;
 }
 
@@ -579,20 +545,53 @@ template<
    typename MutexType = std::mutex>
 class mutex_guarded : public detail::mutex_guarded_base<DataType, MutexType>
 {
+   template <typename S, typename M>
+   friend class lock_proxy;
+
+   template<typename G, typename D, typename M, typename T>
+   friend class mutex_guarded_impl;
+
+   using mutex_traits = detail::mutex_traits<MutexType>;
+   using unique_lock_policy = detail::unique_lock_policy<mutex_traits>;
+   using unique_lock_proxy = lock_proxy<mutex_guarded<DataType, MutexType>, unique_lock_policy>;
+
 public:
 
    using value_type = DataType;
-   using reference = DataType&;
+   using reference = value_type&;
+   using const_reference = const value_type&;
 
-   template<typename ForwardedType>
-   mutex_guarded(ForwardedType&& data) :
-      detail::mutex_guarded_base<DataType, MutexType>{ std::forward<decltype(data)>(data) }
+   mutex_guarded() = default;
+
+   mutex_guarded(DataType data)
+      : m_data{ std::move(data) }
    {
    }
 
-   mutex_guarded(mutex_guarded<DataType, MutexType>&) = delete;
-   mutex_guarded<DataType, MutexType>& operator=(mutex_guarded<DataType, MutexType>&) = delete;
+   mutex_guarded(mutex_guarded<DataType, MutexType>& other)
+   {
+      unique_lock_proxy guard{ this };
+      m_data = other.m_data;
+   }
 
-   mutex_guarded(mutex_guarded<DataType, MutexType>&&) = delete;
-   mutex_guarded<DataType, MutexType>& operator=(mutex_guarded<DataType, MutexType>&&) = delete;
+   mutex_guarded<DataType, MutexType>& operator=(mutex_guarded<DataType, MutexType>& other)
+   {
+      unique_lock_proxy guard{ this };
+      m_data = other.m_data;
+   };
+
+   mutex_guarded(mutex_guarded<DataType, MutexType>&& other)
+      : m_data{ std::move(other.m_data) }
+   {
+   }
+
+   mutex_guarded<DataType, MutexType>& operator=(mutex_guarded<DataType, MutexType>&& other)
+   {
+      m_data = std::move(other.m_data);
+   }
+
+private:
+
+   mutable MutexType m_mutex;
+   DataType m_data;
 };
