@@ -1,6 +1,5 @@
 #pragma once
 
-#include <iostream>
 #include <mutex>
 #include <type_traits>
 
@@ -57,7 +56,7 @@ namespace detail
    {
    };
 
-   namespace tag
+   namespace mutex_category
    {
       struct unique;
       struct shared;
@@ -76,7 +75,7 @@ namespace detail
    * @brief Partial specialization for exclusive lock traits.
    */
    template<typename MutexType>
-   struct mutex_traits_impl<MutexType, detail::tag::unique>
+   struct mutex_traits_impl<MutexType, detail::mutex_category::unique>
    {
       static void lock(MutexType& mutex)
       {
@@ -98,8 +97,8 @@ namespace detail
    * @brief Partial specialization for shared lock traits.
    */
    template<typename MutexType>
-   struct mutex_traits_impl<MutexType, detail::tag::shared> :
-      detail::mutex_traits_impl<MutexType, detail::tag::unique>
+   struct mutex_traits_impl<MutexType, detail::mutex_category::shared> :
+      detail::mutex_traits_impl<MutexType, detail::mutex_category::unique>
    {
       static void lock_shared(MutexType& mutex)
       {
@@ -121,8 +120,8 @@ namespace detail
    * @brief Partial specialization for exclusive, timed lock traits.
    */
    template<typename MutexType>
-   struct mutex_traits_impl<MutexType, detail::tag::unique_and_timed> :
-      detail::mutex_traits_impl<MutexType, detail::tag::unique>
+   struct mutex_traits_impl<MutexType, detail::mutex_category::unique_and_timed> :
+      detail::mutex_traits_impl<MutexType, detail::mutex_category::unique>
    {
       template<typename ChronoType>
       static bool try_lock_for(MutexType& mutex, const ChronoType& timeout)
@@ -141,9 +140,9 @@ namespace detail
    * @brief Partial specialization for shared, timed lock traits.
    */
    template<typename MutexType>
-   struct mutex_traits_impl<MutexType, detail::tag::shared_and_timed> :
-      detail::mutex_traits_impl<MutexType, detail::tag::unique_and_timed>,
-      detail::mutex_traits_impl<MutexType, detail::tag::shared>
+   struct mutex_traits_impl<MutexType, detail::mutex_category::shared_and_timed> :
+      detail::mutex_traits_impl<MutexType, detail::mutex_category::unique_and_timed>,
+      detail::mutex_traits_impl<MutexType, detail::mutex_category::shared>
    {
       template<typename ChronoType>
       static void try_lock_shared_for(MutexType& mutex, const ChronoType& timeout)
@@ -169,25 +168,25 @@ namespace detail
    template<>
    struct mutex_tagger<true, false, false>
    {
-      using type = detail::tag::unique;
+      using type = detail::mutex_category::unique;
    };
 
    template<>
    struct mutex_tagger<true, true, false>
    {
-      using type = detail::tag::shared;
+      using type = detail::mutex_category::shared;
    };
 
    template<>
    struct mutex_tagger<true, false, true>
    {
-      using type = detail::tag::unique_and_timed;
+      using type = detail::mutex_category::unique_and_timed;
    };
 
    template<>
    struct mutex_tagger<true, true, true>
    {
-      using type = detail::tag::shared_and_timed;
+      using type = detail::mutex_category::shared_and_timed;
    };
 
    /**
@@ -347,11 +346,6 @@ public:
    using reference = value_type&;
    using const_reference = const value_type&;
 
-   lock_proxy(const ParentType* parent) : m_parent{ parent }
-   {
-      LockPolicyType::lock(parent->m_mutex);
-   }
-
    lock_proxy(ParentType* parent) : m_parent{ parent }
    {
       LockPolicyType::lock(parent->m_mutex);
@@ -390,7 +384,10 @@ public:
 
 private:
 
-   mutable ParentType* m_parent;
+   mutable typename std::conditional<
+      std::is_const<ParentType>::value,
+      typename std::add_pointer<const ParentType>::type,
+      typename std::add_pointer<ParentType>::type>::type m_parent;
 };
 
 template<typename DataType, typename MutexType>
@@ -409,13 +406,14 @@ template<
    typename SubclassType,
    typename DataType,
    typename MutexType>
-class mutex_guarded_impl<SubclassType, DataType, MutexType, detail::tag::unique>
+class mutex_guarded_impl<SubclassType, DataType, MutexType, detail::mutex_category::unique>
 {
 public:
 
    using mutex_traits = detail::mutex_traits<MutexType>;
    using unique_lock_policy = detail::unique_lock_policy<mutex_traits>;
    using unique_lock_proxy = lock_proxy<SubclassType, unique_lock_policy>;
+   using const_unique_lock_proxy = const lock_proxy<const SubclassType, unique_lock_policy>;
 
    auto operator->() -> unique_lock_proxy
    {
@@ -432,7 +430,7 @@ public:
       return { static_cast<SubclassType*>(this) };
    }
 
-   auto lock() const -> const unique_lock_proxy
+   auto lock() const -> const_unique_lock_proxy
    {
       return { static_cast<const SubclassType*>(this) };
    }
@@ -444,13 +442,21 @@ public:
       const auto scopedGuard = lock();
       return callable(static_cast<SubclassType*>(this)->m_data);
    }
+
+   template<typename CallableType>
+   auto with_lock_held(CallableType&& callable) const
+      -> decltype(std::declval<CallableType>().operator()(std::declval<const DataType&>()))
+   {
+      const auto scopedGuard = lock();
+      return callable(static_cast<const SubclassType*>(this)->m_data);
+   }
 };
 
 template<
    typename SubclassType,
    typename DataType,
    typename MutexType>
-class mutex_guarded_impl<SubclassType, DataType, MutexType, detail::tag::unique_and_timed>
+class mutex_guarded_impl<SubclassType, DataType, MutexType, detail::mutex_category::unique_and_timed>
 {
 public:
 
@@ -458,9 +464,11 @@ public:
 
    using timed_lock_policy = detail::timed_unique_lock_policy<mutex_traits>;
    using timed_lock_proxy = lock_proxy<SubclassType, timed_lock_policy>;
+   using const_timed_lock_proxy = const lock_proxy<const SubclassType, timed_lock_policy>;
 
    using unique_lock_policy = detail::unique_lock_policy<mutex_traits>;
    using unique_lock_proxy = lock_proxy<SubclassType, unique_lock_policy>;
+   using const_unique_lock_proxy = const lock_proxy<const SubclassType, unique_lock_policy>;
 
    template<typename ChronoType>
    auto try_lock_for(const ChronoType& timeout) -> timed_lock_proxy
@@ -469,9 +477,9 @@ public:
    }
 
    template<typename ChronoType>
-   auto try_lock_for(const ChronoType& timeout) const -> const timed_lock_proxy
+   auto try_lock_for(const ChronoType& timeout) const -> const_timed_lock_proxy
    {
-      return { static_cast<SubclassType*>(this), timeout };
+      return { static_cast<const SubclassType*>(this), timeout };
    }
 };
 
@@ -479,7 +487,7 @@ template<
    typename SubclassType,
    typename DataType,
    typename MutexType>
-class mutex_guarded_impl<SubclassType, DataType, MutexType, detail::tag::shared>
+class mutex_guarded_impl<SubclassType, DataType, MutexType, detail::mutex_category::shared>
 {
 public:
 
@@ -487,18 +495,20 @@ public:
 
    using shared_lock_policy = detail::shared_lock_policy<mutex_traits>;
    using shared_lock_proxy = lock_proxy<SubclassType, shared_lock_policy>;
+   using const_shared_lock_proxy = const lock_proxy<const SubclassType, shared_lock_policy>;
 
    using unique_lock_policy = detail::unique_lock_policy<mutex_traits>;
    using unique_lock_proxy = lock_proxy<SubclassType, unique_lock_policy>;
+   using const_unique_lock_proxy = const lock_proxy<const SubclassType, unique_lock_policy>;
 
    auto write_lock() -> unique_lock_proxy
    {
       return { static_cast<SubclassType*>(this) };
    }
 
-   auto write_lock() const -> const unique_lock_proxy
+   auto write_lock() const -> const_unique_lock_proxy
    {
-      return { static_cast<SubclassType*>(this) };
+      return { static_cast<const SubclassType*>(this) };
    }
 
    auto read_lock() -> shared_lock_proxy
@@ -506,9 +516,9 @@ public:
       return { static_cast<SubclassType*>(this) };
    }
 
-   auto read_lock() const -> const shared_lock_proxy
+   auto read_lock() const -> const_shared_lock_proxy
    {
-      return { static_cast<SubclassType*>(this) };
+      return { static_cast<const SubclassType*>(this) };
    }
 
    template<typename CallableType>
@@ -516,15 +526,23 @@ public:
       -> decltype(std::declval<CallableType>().operator()(std::declval<DataType&>()))
    {
       const auto scopedGuard = write_lock();
-      return callable(this->m_data);
+      return callable(static_cast<SubclassType*>(this)->m_data);
    }
 
    template<typename CallableType>
-   auto with_read_lock_held(CallableType&& callable)
+   auto with_write_lock_held(CallableType&& callable) const
+      -> decltype(std::declval<CallableType>().operator()(std::declval<const DataType&>()))
+   {
+      const auto scopedGuard = write_lock();
+      return callable(static_cast<const SubclassType*>(this)->m_data);
+   }
+
+   template<typename CallableType>
+   auto with_read_lock_held(CallableType&& callable) const
       -> decltype(std::declval<CallableType>().operator()(std::declval<const DataType&>()))
    {
       const auto scopedGuard = read_lock();
-      return callable(this->m_data);
+      return callable(static_cast<const SubclassType*>(this)->m_data);
    }
 };
 
@@ -562,6 +580,7 @@ public:
    using const_reference = const value_type&;
 
    mutex_guarded() = default;
+   ~mutex_guarded() noexcept = default;
 
    mutex_guarded(DataType data)
       : m_data{ std::move(data) }
@@ -570,13 +589,13 @@ public:
 
    mutex_guarded(mutex_guarded<DataType, MutexType>& other)
    {
-      unique_lock_proxy guard{ this };
+      unique_lock_proxy guard{ &other };
       m_data = other.m_data;
    }
 
    mutex_guarded<DataType, MutexType>& operator=(mutex_guarded<DataType, MutexType>& other)
    {
-      unique_lock_proxy guard{ this };
+      unique_lock_proxy guard{ &other };
       m_data = other.m_data;
    };
 

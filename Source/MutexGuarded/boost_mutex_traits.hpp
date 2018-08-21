@@ -2,6 +2,11 @@
 
 #include "mutex_guarded.hpp"
 
+namespace boost
+{
+   class recursive_timed_mutex;
+}
+
 namespace detail
 {
    template<>
