@@ -208,25 +208,29 @@ namespace detail
       using mutex_type = MutexType;
    };
 
+   template<template<typename...> class MutexTraits>
+   struct policy_base
+   {
+   };
+
    /**
    * Function mapping:
    *
    *     Lock()   -> Lock()
    *     Unlock() -> Unlock()
    */
-   template<typename MutexTraits>
-   struct unique_lock_policy
+   struct unique_lock_policy : policy_base<detail::mutex_traits>
    {
       template<typename MutexType>
       static void lock(MutexType& mutex)
       {
-         MutexTraits::lock(mutex);
+         detail::mutex_traits<MutexType>::lock(mutex);
       }
 
       template<typename MutexType>
       static void unlock(MutexType& mutex)
       {
-         MutexTraits::unlock(mutex);
+         detail::mutex_traits<MutexType>::unlock(mutex);
       }
    };
 
@@ -236,8 +240,7 @@ namespace detail
    *     Lock()   -> lock_shared()
    *     Unlock() -> Unlock_shared()
    */
-   template<typename MutexTraits>
-   struct shared_lock_policy
+   struct shared_lock_policy : policy_base<detail::mutex_traits>
    {
       template<typename MutexType>
       static void lock(MutexType& mutex)
@@ -247,7 +250,7 @@ namespace detail
             "The SharedLockPolicy expects to operate on a mutex that supports the SharedMutex "
             "Concept.");
 
-         MutexTraits::lock_shared(mutex);
+         detail::mutex_traits<MutexType>::lock_shared(mutex);
       }
 
       template<typename MutexType>
@@ -258,7 +261,7 @@ namespace detail
             "The SharedLockPolicy expects to operate on a mutex that supports the SharedMutex "
             "Concept.");
 
-         MutexTraits::unlock_shared(mutex);
+         detail::mutex_traits<MutexType>::unlock_shared(mutex);
       }
    };
 
@@ -268,8 +271,7 @@ namespace detail
    *     Lock()   -> TryLockFor()
    *     Unlock() -> Unlock()
    */
-   template<typename MutexTraits>
-   struct timed_unique_lock_policy
+   struct timed_unique_lock_policy : policy_base<detail::mutex_traits>
    {
       template<
          typename MutexType,
@@ -281,7 +283,7 @@ namespace detail
             "The SharedTimedLockPolicy expects to operate on a mutex that supports the TimedMutex "
             "Concept.");
 
-         MutexTraits::try_lock_for(mutex, timeout);
+         detail::mutex_traits<MutexType>::try_lock_for(mutex, timeout);
       }
 
       template<typename MutexType>
@@ -292,7 +294,7 @@ namespace detail
             "The SharedTimedLockPolicy expects to operate on a mutex that supports the TimedMutex "
             "Concept.");
 
-         MutexTraits::unlock(mutex);
+         detail::mutex_traits<MutexType>::unlock(mutex);
       }
    };
 
@@ -302,8 +304,7 @@ namespace detail
    *     Lock()   -> TryLockFor()
    *     Unlock() -> Unlock()
    */
-   template<typename MutexTraits>
-   struct timed_shared_lock_policy
+   struct timed_shared_lock_policy : policy_base<detail::mutex_traits>
    {
       template<
          typename MutexType,
@@ -315,7 +316,7 @@ namespace detail
             "The SharedTimedLockPolicy expects to operate on a mutex that supports the TimedMutex "
             "Concept.");
 
-         MutexTraits::try_lock_shared_for(mutex, timeout);
+         detail::mutex_traits<MutexType>::try_lock_shared_for(mutex, timeout);
       }
 
       template<typename MutexType>
@@ -326,7 +327,7 @@ namespace detail
             "The SharedTimedLockPolicy expects to operate on a mutex that supports the TimedMutex "
             "Concept.");
 
-         MutexTraits::unlock_shared(mutex);
+         detail::mutex_traits<MutexType>::unlock_shared(mutex);
       }
    };
 }
@@ -390,12 +391,8 @@ private:
       typename std::add_pointer<ParentType>::type>::type m_parent;
 };
 
-template<typename DataType, typename MutexType>
-class mutex_guarded;
-
 template<
    typename SubclassType,
-   typename MutexType,
    typename DataType,
    typename TagType>
 class mutex_guarded_impl
@@ -404,26 +401,14 @@ class mutex_guarded_impl
 
 template<
    typename SubclassType,
-   typename DataType,
-   typename MutexType>
-class mutex_guarded_impl<SubclassType, DataType, MutexType, detail::mutex_category::unique>
+   typename DataType>
+class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique>
 {
 public:
 
-   using mutex_traits = detail::mutex_traits<MutexType>;
-   using unique_lock_policy = detail::unique_lock_policy<mutex_traits>;
+   using unique_lock_policy = detail::unique_lock_policy;
    using unique_lock_proxy = lock_proxy<SubclassType, unique_lock_policy>;
    using const_unique_lock_proxy = const lock_proxy<const SubclassType, unique_lock_policy>;
-
-   auto operator->() -> unique_lock_proxy
-   {
-      return { static_cast<SubclassType*>(this) };
-   }
-
-   auto operator->() const -> const unique_lock_proxy
-   {
-      return { static_cast<const SubclassType*>(this) };
-   }
 
    auto lock() -> unique_lock_proxy
    {
@@ -454,19 +439,16 @@ public:
 
 template<
    typename SubclassType,
-   typename DataType,
-   typename MutexType>
-class mutex_guarded_impl<SubclassType, DataType, MutexType, detail::mutex_category::unique_and_timed>
+   typename DataType>
+class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique_and_timed>
 {
 public:
 
-   using mutex_traits = detail::mutex_traits<MutexType>;
-
-   using timed_lock_policy = detail::timed_unique_lock_policy<mutex_traits>;
+   using timed_lock_policy = detail::timed_unique_lock_policy;
    using timed_lock_proxy = lock_proxy<SubclassType, timed_lock_policy>;
    using const_timed_lock_proxy = const lock_proxy<const SubclassType, timed_lock_policy>;
 
-   using unique_lock_policy = detail::unique_lock_policy<mutex_traits>;
+   using unique_lock_policy = detail::unique_lock_policy;
    using unique_lock_proxy = lock_proxy<SubclassType, unique_lock_policy>;
    using const_unique_lock_proxy = const lock_proxy<const SubclassType, unique_lock_policy>;
 
@@ -485,19 +467,16 @@ public:
 
 template<
    typename SubclassType,
-   typename DataType,
-   typename MutexType>
-class mutex_guarded_impl<SubclassType, DataType, MutexType, detail::mutex_category::shared>
+   typename DataType>
+class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared>
 {
 public:
 
-   using mutex_traits = detail::mutex_traits<MutexType>;
+   using shared_lock_policy = detail::shared_lock_policy;
+   using shared_lock_proxy = lock_proxy<SubclassType, detail::shared_lock_policy>;
+   using const_shared_lock_proxy = const lock_proxy<const SubclassType, detail::shared_lock_policy>;
 
-   using shared_lock_policy = detail::shared_lock_policy<mutex_traits>;
-   using shared_lock_proxy = lock_proxy<SubclassType, shared_lock_policy>;
-   using const_shared_lock_proxy = const lock_proxy<const SubclassType, shared_lock_policy>;
-
-   using unique_lock_policy = detail::unique_lock_policy<mutex_traits>;
+   using unique_lock_policy = detail::unique_lock_policy;
    using unique_lock_proxy = lock_proxy<SubclassType, unique_lock_policy>;
    using const_unique_lock_proxy = const lock_proxy<const SubclassType, unique_lock_policy>;
 
@@ -530,14 +509,6 @@ public:
    }
 
    template<typename CallableType>
-   auto with_write_lock_held(CallableType&& callable) const
-      -> decltype(std::declval<CallableType>().operator()(std::declval<const DataType&>()))
-   {
-      const auto scopedGuard = write_lock();
-      return callable(static_cast<const SubclassType*>(this)->m_data);
-   }
-
-   template<typename CallableType>
    auto with_read_lock_held(CallableType&& callable) const
       -> decltype(std::declval<CallableType>().operator()(std::declval<const DataType&>()))
    {
@@ -545,6 +516,9 @@ public:
       return callable(static_cast<const SubclassType*>(this)->m_data);
    }
 };
+
+template<typename DataType, typename MutexType>
+class mutex_guarded;
 
 namespace detail
 {
@@ -554,7 +528,6 @@ namespace detail
    using mutex_guarded_base = mutex_guarded_impl<
       mutex_guarded<DataType, MutexType>,
       DataType,
-      MutexType,
       typename detail::mutex_traits<MutexType>::tag_type>;
 }
 
@@ -566,12 +539,12 @@ class mutex_guarded : public detail::mutex_guarded_base<DataType, MutexType>
    template <typename S, typename M>
    friend class lock_proxy;
 
-   template<typename G, typename D, typename M, typename T>
+   template<typename G, typename D, typename T>
    friend class mutex_guarded_impl;
 
-   using mutex_traits = detail::mutex_traits<MutexType>;
-   using unique_lock_policy = detail::unique_lock_policy<mutex_traits>;
-   using unique_lock_proxy = lock_proxy<mutex_guarded<DataType, MutexType>, unique_lock_policy>;
+   using unique_lock_proxy = lock_proxy<
+      mutex_guarded<DataType, MutexType>,
+      detail::unique_lock_policy>;
 
 public:
 

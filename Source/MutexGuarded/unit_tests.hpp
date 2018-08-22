@@ -6,7 +6,6 @@
 #include <boost/thread/recursive_mutex.hpp>
 #include <boost/thread/shared_mutex.hpp>
 
-//#include "boost_mutex_traits.hpp"
 #include "mutex_guarded.hpp"
 
 namespace detail
@@ -265,7 +264,7 @@ TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
    const std::string sample = "Testing a boost::shared_mutex.";
 
    using mutex_type = detail::wrapped_mutex<boost::shared_mutex, detail::mutex_category::shared>;
-   mutex_guarded<std::string, mutex_type> data{ sample };
+   const mutex_guarded<std::string, mutex_type> data{ sample };
 
    SECTION("Locking")
    {
@@ -294,7 +293,7 @@ TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
 
-      const std::size_t length = data.with_read_lock_held([](const std::string& value) noexcept
+      const std::size_t length = data.with_read_lock_held([] (const std::string& value) noexcept
       {
          REQUIRE(detail::global::tracker.was_locked == true);
 
@@ -317,6 +316,7 @@ TEST_CASE("Moves and Copies")
    {
       auto copy = data;
 
+      // Making a copy should lock the source object:
       REQUIRE(detail::global::tracker.was_locked == true);
       REQUIRE(detail::global::tracker.was_unlocked == true);
 
