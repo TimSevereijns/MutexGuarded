@@ -258,13 +258,12 @@ TEST_CASE("Guarded with a boost::recursive_mutex", "[Boost]")
    }
 }
 
-
 TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
 {
    const std::string sample = "Testing a boost::shared_mutex.";
 
    using mutex_type = detail::wrapped_mutex<boost::shared_mutex, detail::mutex_category::shared>;
-   const mutex_guarded<std::string, mutex_type> data{ sample };
+   mutex_guarded<std::string, mutex_type> data{ sample };
 
    SECTION("Locking")
    {
