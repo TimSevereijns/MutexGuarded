@@ -121,11 +121,6 @@ TEST_CASE("Trait Detection")
       REQUIRE(detail::supports_shared_locking<boost::shared_mutex>::value == true);
       REQUIRE(detail::supports_timed_locking<boost::shared_mutex>::value == false);
    }
-
-   SECTION("Unique locking should always be possible")
-   {
-      // @todo Use SFINAE to detect lock() functionality on all mutex categories.
-   }
 }
 
 TEST_CASE("Simple sanity checks")

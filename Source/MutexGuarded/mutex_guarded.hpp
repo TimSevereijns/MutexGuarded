@@ -211,19 +211,6 @@ namespace detail
       using mutex_type = MutexType;
    };
 
-
-   /**
-   * @brief An empty base class meant to remove template requirements for the actual
-   * policy structs.
-   *
-   * Instead of specifying the MutexType when declaring an instance of the policy, the
-   * MutexType will be automatically deduced once a function on the policy is invoked.
-   */
-   template<template<typename...> class MutexTraits>
-   struct policy_base
-   {
-   };
-
    /**
    * @brief A locking policy targeted at mutexes that comply with the Mutex concept.
    *
@@ -232,7 +219,7 @@ namespace detail
    *     lock()   -> lock()
    *     unlock() -> unlock()
    */
-   struct unique_lock_policy : policy_base<detail::mutex_traits>
+   struct unique_lock_policy
    {
       template<typename MutexType>
       static void lock(MutexType& mutex)
@@ -255,7 +242,7 @@ namespace detail
    *     lock()   -> lock_shared()
    *     unlock() -> unlock_shared()
    */
-   struct shared_lock_policy : policy_base<detail::mutex_traits>
+   struct shared_lock_policy
    {
       template<typename MutexType>
       static void lock(MutexType& mutex)
@@ -288,7 +275,7 @@ namespace detail
    *     lock()   -> try_lock_for()
    *     unlock() -> unlock()
    */
-   struct timed_unique_lock_policy : policy_base<detail::mutex_traits>
+   struct timed_unique_lock_policy
    {
       template<
          typename MutexType,
@@ -323,7 +310,7 @@ namespace detail
    *     Lock()   -> TryLockFor()
    *     Unlock() -> Unlock()
    */
-   struct timed_shared_lock_policy : policy_base<detail::mutex_traits>
+   struct timed_shared_lock_policy
    {
       template<
          typename MutexType,
@@ -408,7 +395,7 @@ public:
 
 private:
 
-   mutable typename std::conditional<
+   typename std::conditional<
       std::is_const<ParentType>::value,
       typename std::add_pointer<const ParentType>::type,
       typename std::add_pointer<ParentType>::type>::type m_parent;
@@ -593,6 +580,10 @@ template<
    typename MutexType = std::mutex>
 class mutex_guarded : public detail::mutex_guarded_base<DataType, MutexType>
 {
+   static_assert(
+      detail::supports_unique_locking<MutexType>::value,
+      "The MutexType must support the Mutex concept");
+
    template <typename S, typename M>
    friend class lock_proxy;
 
@@ -615,13 +606,13 @@ public:
 
    mutex_guarded(const mutex_guarded<DataType, MutexType>& other)
    {
-      std::lock_guard<MutexType> guard{ other.m_mutex };
+      const std::lock_guard<MutexType> guard{ other.m_mutex };
       m_data = other.m_data;
    }
 
    mutex_guarded<DataType, MutexType>& operator=(const mutex_guarded<DataType, MutexType>& other)
    {
-      std::lock_guard<MutexType> guard{ other.m_mutex };
+      const std::lock_guard<MutexType> guard{ other.m_mutex };
       m_data = other.m_data;
    };
 
