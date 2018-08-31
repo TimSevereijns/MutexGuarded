@@ -410,7 +410,8 @@ class mutex_guarded_impl
 };
 
 /**
-* @brief Specialization that provides the functionality needed when dealing with a exclusive mutex.
+* @brief Specialization that provides the functionality to lock and unlock a mutex that supports
+* the Mutex concept.
 */
 template<
    typename SubclassType,
@@ -427,16 +428,29 @@ public:
       const SubclassType,
       detail::unique_lock_policy>;
 
+   /**
+   * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex.
+   */
    auto lock() -> unique_lock_proxy
    {
       return { static_cast<SubclassType*>(this) };
    }
 
+   /**
+   * @overload
+   */
    auto lock() const -> const_unique_lock_proxy
    {
       return { static_cast<const SubclassType*>(this) };
    }
 
+   /**
+   * @brief Locks the underlying mutex, and then executes the passed in functor with the lock held.
+   *
+   * @param[in] callable            A callable type like a lambda, std::function, etc.
+   *                                This callable type should take its input parameter
+   *                                by reference. Taking the input by value is pointless.
+   */
    template<typename CallableType>
    auto with_lock_held(CallableType&& callable)
       -> decltype(std::declval<CallableType>().operator()(std::declval<DataType&>()))
@@ -445,6 +459,13 @@ public:
       return callable(static_cast<SubclassType*>(this)->m_data);
    }
 
+   /**
+   * @brief Locks the underlying mutex, and then executes the passed in functor with the lock held.
+   *
+   * @param[in] callable            A callable type like a lambda, std::function, etc.
+   *                                This callable type should take its input parameter
+   *                                by const reference. Taking the input by value is pointless.
+   */
    template<typename CallableType>
    auto with_lock_held(CallableType&& callable) const
       -> decltype(std::declval<CallableType>().operator()(std::declval<const DataType&>()))
@@ -455,8 +476,8 @@ public:
 };
 
 /**
-* @brief Specialization that provides the functionality needed when dealing with a exclusive, timed
-* mutex.
+* @brief Specialization that provides the functionality to lock and unlock a mutex that supports
+* the TimedMutex concept.
 */
 template<
    typename SubclassType,
@@ -481,12 +502,19 @@ public:
       const SubclassType,
       detail::unique_lock_policy>;
 
+   /**
+   * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex
+   * using the specified timeout.
+   */
    template<typename ChronoType>
    auto try_lock_for(const ChronoType& timeout) -> timed_lock_proxy
    {
       return { static_cast<SubclassType*>(this), timeout };
    }
 
+   /**
+   * @overload
+   */
    template<typename ChronoType>
    auto try_lock_for(const ChronoType& timeout) const -> const_timed_lock_proxy
    {
@@ -495,7 +523,8 @@ public:
 };
 
 /**
-* @brief Specialization that provides the functionality needed when dealing with a shared mutex.
+* @brief Specialization that provides the functionality to lock and unlock a mutex that supports
+* the SharedMutex concept.
 */
 template<
    typename SubclassType,
@@ -520,26 +549,48 @@ public:
       const SubclassType,
       detail::unique_lock_policy>;
 
+   /**
+   * @brief Returns a proxy class that will automatically acquire and release an exclusive
+   * lock on the underlying mutex.
+   */
    auto write_lock() -> unique_lock_proxy
    {
       return { static_cast<SubclassType*>(this) };
    }
 
+   /**
+   * @overload
+   */
    auto write_lock() const -> const_unique_lock_proxy
    {
       return { static_cast<const SubclassType*>(this) };
    }
 
+   /**
+   * @brief Returns a proxy class that will automatically acquire and release a shared
+   * lock on the underlying mutex.
+   */
    auto read_lock() -> shared_lock_proxy
    {
       return { static_cast<SubclassType*>(this) };
    }
 
+   /**
+   * @overload
+   */
    auto read_lock() const -> const_shared_lock_proxy
    {
       return { static_cast<const SubclassType*>(this) };
    }
 
+   /**
+   * @brief Grabs an exclusive lock on the underlying mutex, and then executes the passed in
+   * functor with the lock held.
+   *
+   * @param[in] callable            A callable type like a lambda, std::function, etc.
+   *                                This callable type should take its input parameter
+   *                                by reference. Taking the input by value is pointless.
+   */
    template<typename CallableType>
    auto with_write_lock_held(CallableType&& callable)
       -> decltype(std::declval<CallableType>().operator()(std::declval<DataType&>()))
@@ -548,6 +599,14 @@ public:
       return callable(static_cast<SubclassType*>(this)->m_data);
    }
 
+   /**
+   * @brief Grabs a shared lock on the underlying mutex, and then executes the passed in
+   * functor with the lock held.
+   *
+   * @param[in] callable            A callable type like a lambda, std::function, etc.
+   *                                This callable type should take its input parameter
+   *                                by const reference. Taking the input by value is pointless.
+   */
    template<typename CallableType>
    auto with_read_lock_held(CallableType&& callable) const
       -> decltype(std::declval<CallableType>().operator()(std::declval<const DataType&>()))
