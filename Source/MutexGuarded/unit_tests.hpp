@@ -8,6 +8,8 @@
 
 #include "mutex_guarded.hpp"
 
+#include <iostream>
+
 namespace detail
 {
    namespace global
@@ -44,6 +46,8 @@ namespace detail
 
       auto lock() -> decltype(std::declval<MutexType>().lock())
       {
+         //std::cout << "Locking...\n";
+
          global::tracker.was_locked = true;
          m_mutex.lock();
       }
@@ -55,6 +59,8 @@ namespace detail
 
       auto unlock() -> decltype(std::declval<MutexType>().unlock())
       {
+         //std::cout << "Unlocking...\n";
+
          global::tracker.was_unlocked = true;
          m_mutex.unlock();
       }
@@ -77,6 +83,8 @@ namespace detail
 
       auto lock_shared() -> decltype(std::declval<MutexType>().lock_shared())
       {
+         //std::cout << "Locking shared...\n";
+
          global::tracker.was_locked = true;
          m_mutex.lock_shared();
       }
@@ -89,6 +97,8 @@ namespace detail
 
       auto unlock_shared() -> decltype(std::declval<MutexType>().unlock_shared())
       {
+         //std::cout << "Unlocking shared...\n";
+
          global::tracker.was_unlocked = true;
          m_mutex.unlock_shared();
       }
@@ -166,24 +176,15 @@ TEST_CASE("Guarded with a std::mutex", "[Std]")
    const std::string sample = "Testing a std::mutex.";
 
    using mutex_type = detail::wrapped_mutex<std::mutex, detail::mutex_category::unique>;
-   mutex_guarded<std::string, mutex_type> data{ sample };
+   const mutex_guarded<std::string, mutex_type> data{ sample };
 
    SECTION("Locking")
    {
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
 
+      REQUIRE(data.lock().is_valid());
       REQUIRE(*data.lock() == sample);
-
-      REQUIRE(detail::global::tracker.was_locked == true);
-      REQUIRE(detail::global::tracker.was_unlocked == true);
-   }
-
-   SECTION("Simple data access")
-   {
-      REQUIRE(detail::global::tracker.was_locked == false);
-      REQUIRE(detail::global::tracker.was_unlocked == false);
-
       REQUIRE(data.lock()->length() == sample.length());
 
       REQUIRE(detail::global::tracker.was_locked == true);
@@ -198,6 +199,7 @@ TEST_CASE("Guarded with a std::mutex", "[Std]")
       const std::size_t length = data.with_lock_held([] (const std::string& value) noexcept
       {
          REQUIRE(detail::global::tracker.was_locked == true);
+         //std::cout << "   In lambda...\n";
 
          return value.length();
       });
@@ -219,17 +221,8 @@ TEST_CASE("Guarded with a boost::recursive_mutex", "[Boost]")
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
 
+      REQUIRE(data.lock().is_valid());
       REQUIRE(*data.lock() == sample);
-
-      REQUIRE(detail::global::tracker.was_locked == true);
-      REQUIRE(detail::global::tracker.was_unlocked == true);
-   }
-
-   SECTION("Simple data access")
-   {
-      REQUIRE(detail::global::tracker.was_locked == false);
-      REQUIRE(detail::global::tracker.was_unlocked == false);
-
       REQUIRE(data.lock()->length() == sample.length());
 
       REQUIRE(detail::global::tracker.was_locked == true);
@@ -244,6 +237,7 @@ TEST_CASE("Guarded with a boost::recursive_mutex", "[Boost]")
       const std::size_t length = data.with_lock_held([] (const std::string& value) noexcept
       {
          REQUIRE(detail::global::tracker.was_locked == true);
+         //std::cout << "   In lambda...\n";
 
          return value.length();
       });
@@ -260,29 +254,32 @@ TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
    using mutex_type = detail::wrapped_mutex<boost::shared_mutex, detail::mutex_category::shared>;
    mutex_guarded<std::string, mutex_type> data{ sample };
 
-   SECTION("Locking")
+   SECTION("Read Locking")
    {
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
 
+      REQUIRE(data.read_lock().is_valid());
       REQUIRE(*data.read_lock() == sample);
-
-      REQUIRE(detail::global::tracker.was_locked == true);
-      REQUIRE(detail::global::tracker.was_unlocked == true);
-   }
-
-   SECTION("Simple data access")
-   {
-      REQUIRE(detail::global::tracker.was_locked == false);
-      REQUIRE(detail::global::tracker.was_unlocked == false);
-
       REQUIRE(data.read_lock()->length() == sample.length());
 
       REQUIRE(detail::global::tracker.was_locked == true);
       REQUIRE(detail::global::tracker.was_unlocked == true);
    }
 
-   SECTION("Data access using a lambda")
+   SECTION("Write Locking")
+   {
+      REQUIRE(detail::global::tracker.was_locked == false);
+      REQUIRE(detail::global::tracker.was_unlocked == false);
+
+      REQUIRE(data.write_lock().is_valid());
+      REQUIRE(data.write_lock()->length() == sample.length());
+
+      REQUIRE(detail::global::tracker.was_locked == true);
+      REQUIRE(detail::global::tracker.was_unlocked == true);
+   }
+
+   SECTION("Reading data using a lambda")
    {
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
@@ -290,11 +287,34 @@ TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
       const std::size_t length = data.with_read_lock_held([] (const std::string& value) noexcept
       {
          REQUIRE(detail::global::tracker.was_locked == true);
+         //std::cout << "   In lambda...\n";
 
          return value.length();
       });
 
       REQUIRE(length == sample.length());
+      REQUIRE(detail::global::tracker.was_unlocked == true);
+   }
+
+   SECTION("Writing data using a lambda")
+   {
+      REQUIRE(detail::global::tracker.was_locked == false);
+      REQUIRE(detail::global::tracker.was_unlocked == false);
+
+      const std::string anotherString = "Something else";
+
+      const std::size_t length = data.with_write_lock_held([&] (std::string& value) noexcept
+      {
+         REQUIRE(detail::global::tracker.was_locked == true);
+         //std::cout << "   In lambda...\n";
+
+         value = anotherString;
+         return value.length();
+      });
+
+      REQUIRE(length == anotherString.length());
+      REQUIRE(*data.read_lock() == anotherString);
+
       REQUIRE(detail::global::tracker.was_unlocked == true);
    }
 }
@@ -334,5 +354,35 @@ TEST_CASE("Moves and Copies")
 
       REQUIRE(detail::global::tracker.was_locked == true);
       REQUIRE(detail::global::tracker.was_unlocked == true);
+   }
+}
+
+TEST_CASE("Const-Correctness")
+{
+   const std::string sample = "Some sample data.";
+
+   SECTION("Const-ref to mutable mutex_guarded<..., std::mutex>")
+   {
+      using mutex_type = detail::wrapped_mutex<std::mutex, detail::mutex_category::unique>;
+      mutex_guarded<std::string, mutex_type> data{ sample };
+
+      const auto& copy = data;
+
+      REQUIRE(copy.lock().is_valid());
+      REQUIRE(copy.lock()->length() == sample.length());
+   }
+
+   SECTION("Const-ref to mutable mutex_guarded<..., boost::shared_mutex>")
+   {
+      using mutex_type = detail::wrapped_mutex<boost::shared_mutex, detail::mutex_category::shared>;
+      mutex_guarded<std::string, mutex_type> data{ sample };
+
+      const auto& copy = data;
+
+      REQUIRE(copy.read_lock().is_valid());
+      REQUIRE(copy.read_lock()->length() == sample.length());
+
+      // @note Grabbing a write lock on a const-reference to a mutex_guarded<...> instance
+      // is obviously non-sensical; use a read lock instead!
    }
 }

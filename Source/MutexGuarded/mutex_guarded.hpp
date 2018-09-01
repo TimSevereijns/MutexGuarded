@@ -280,14 +280,14 @@ namespace detail
       template<
          typename MutexType,
          typename ChronoType>
-      static void lock(MutexType& mutex, ChronoType& timeout)
+      static bool lock(MutexType& mutex, ChronoType& timeout)
       {
          static_assert(
             detail::supports_timed_locking<MutexType>::value,
             "The timed_unique_lock_policy expects to operate on a mutex that supports the "
             "TimedMutex Concept.");
 
-         detail::mutex_traits<MutexType>::try_lock_for(mutex, timeout);
+         return detail::mutex_traits<MutexType>::try_lock_for(mutex, timeout);
       }
 
       template<typename MutexType>
@@ -307,22 +307,22 @@ namespace detail
    *
    * Function mapping:
    *
-   *     Lock()   -> TryLockFor()
-   *     Unlock() -> Unlock()
+   *     lock()   -> try_lock_shared_for()
+   *     unlock() -> unlock_shared()
    */
    struct timed_shared_lock_policy
    {
       template<
          typename MutexType,
          typename ChronoType>
-      static void lock(MutexType& mutex, ChronoType& timeout)
+      static bool lock(MutexType& mutex, ChronoType& timeout)
       {
          static_assert(
             detail::supports_timed_locking<MutexType>::value,
             "The timed_shared_lock_policy expects to operate on a mutex that supports the "
             "SharedTimedMutex Concept.");
 
-         detail::mutex_traits<MutexType>::try_lock_shared_for(mutex, timeout);
+         return detail::mutex_traits<MutexType>::try_lock_shared_for(mutex, timeout);
       }
 
       template<typename MutexType>
@@ -359,18 +359,31 @@ public:
 
    lock_proxy(ParentType* parent) : m_parent{ parent }
    {
+      assert(parent);
+
       LockPolicyType::lock(parent->m_mutex);
    }
 
    template<typename ChronoType>
-   lock_proxy(ParentType* parent, const ChronoType& timeout) : m_parent{ parent }
+   lock_proxy(ParentType* parent, const ChronoType& timeout)
    {
-      LockPolicyType::lock(parent->m_mutex, timeout);
+      assert(parent);
+
+      const auto wasLocked = LockPolicyType::lock(parent->m_mutex, timeout);
+      m_parent = wasLocked ? parent : nullptr;
    }
 
    ~lock_proxy() noexcept
    {
-      LockPolicyType::unlock(m_parent->m_mutex);
+      if (m_parent)
+      {
+         LockPolicyType::unlock(m_parent->m_mutex);
+      }
+   }
+
+   auto is_valid() const -> bool
+   {
+      return m_parent != nullptr;
    }
 
    auto operator->() noexcept -> pointer
@@ -398,7 +411,7 @@ private:
    typename std::conditional<
       std::is_const<ParentType>::value,
       typename std::add_pointer<const ParentType>::type,
-      typename std::add_pointer<ParentType>::type>::type m_parent;
+      typename std::add_pointer<ParentType>::type>::type m_parent = nullptr;
 };
 
 template<
@@ -503,6 +516,22 @@ public:
       detail::unique_lock_policy>;
 
    /**
+   * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex.
+   */
+   auto lock() -> unique_lock_proxy
+   {
+      return { static_cast<SubclassType*>(this) };
+   }
+
+   /**
+   * @overload
+   */
+   auto lock() const -> const_unique_lock_proxy
+   {
+      return { static_cast<const SubclassType*>(this) };
+   }
+
+   /**
    * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex
    * using the specified timeout.
    */
@@ -533,20 +562,12 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared>
 {
 public:
 
-   using shared_lock_proxy = lock_proxy<
-      SubclassType,
-      detail::shared_lock_policy>;
-
-   using const_shared_lock_proxy = const lock_proxy<
+   using shared_lock_proxy = const lock_proxy<
       const SubclassType,
       detail::shared_lock_policy>;
 
    using unique_lock_proxy = lock_proxy<
       SubclassType,
-      detail::unique_lock_policy>;
-
-   using const_unique_lock_proxy = const lock_proxy<
-      const SubclassType,
       detail::unique_lock_policy>;
 
    /**
@@ -559,26 +580,10 @@ public:
    }
 
    /**
-   * @overload
-   */
-   auto write_lock() const -> const_unique_lock_proxy
-   {
-      return { static_cast<const SubclassType*>(this) };
-   }
-
-   /**
    * @brief Returns a proxy class that will automatically acquire and release a shared
    * lock on the underlying mutex.
    */
-   auto read_lock() -> shared_lock_proxy
-   {
-      return { static_cast<SubclassType*>(this) };
-   }
-
-   /**
-   * @overload
-   */
-   auto read_lock() const -> const_shared_lock_proxy
+   auto read_lock() const -> shared_lock_proxy
    {
       return { static_cast<const SubclassType*>(this) };
    }
@@ -616,6 +621,72 @@ public:
    }
 };
 
+/**
+* @brief Specialization that provides the functionality to lock and unlock a mutex that supports
+* the SharedTimedMutex concept.
+*/
+template<
+   typename SubclassType,
+   typename DataType>
+class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared_and_timed>
+{
+public:
+
+   using unique_lock_proxy = lock_proxy<
+      SubclassType,
+      detail::unique_lock_policy>;
+
+   using shared_lock_proxy = const lock_proxy<
+      const SubclassType,
+      detail::shared_lock_policy>;
+
+   using timed_unique_lock_proxy = lock_proxy<
+      SubclassType,
+      detail::timed_unique_lock_policy>;
+
+   using timed_shared_lock_proxy = const lock_proxy<
+      const SubclassType,
+      detail::timed_shared_lock_policy>;
+
+   /**
+   * @brief Returns a proxy class that will automatically acquire and release an exclusive
+   * lock on the underlying mutex.
+   */
+   auto write_lock() -> unique_lock_proxy
+   {
+      return { static_cast<SubclassType*>(this) };
+   }
+
+   /**
+   * @brief Returns a proxy class that will automatically acquire and release a shared
+   * lock on the underlying mutex.
+   */
+   auto read_lock() const -> shared_lock_proxy
+   {
+      return { static_cast<const SubclassType*>(this) };
+   }
+
+   /**
+   * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex
+   * using the specified timeout. Use this function to acquire an exclusive lock.
+   */
+   template<typename ChronoType>
+   auto try_write_lock_for(const ChronoType& timeout) -> timed_unique_lock_proxy
+   {
+      return { static_cast<SubclassType*>(this), timeout };
+   }
+
+   /**
+   * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex
+   * using the specified timeout. Use this function to acquire a shared lock.
+   */
+   template<typename ChronoType>
+   auto try_read_lock_for(const ChronoType& timeout) const -> timed_shared_lock_proxy
+   {
+      return { static_cast<const SubclassType*>(this), timeout };
+   }
+};
+
 template<typename DataType, typename MutexType>
 class mutex_guarded;
 
@@ -633,6 +704,9 @@ namespace detail
 /**
 * @brief A light-weight wrapper that ensures that all reads and writes from and to the supplied
 * data type are guarded by a mutex.
+*
+* This class uses template metaprogramming to inherit functionality appropriate to the specified
+* mutex. See the various `mutex_guard_imp<...>` classes for further documentation.
 */
 template<
    typename DataType,
