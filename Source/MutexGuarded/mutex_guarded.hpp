@@ -473,8 +473,7 @@ public:
    * @returns The result of invoking the functor, provided that the functor returns something.
    */
    template<typename CallableType>
-   auto with_lock_held(CallableType&& callable)
-      -> decltype(std::declval<CallableType>().operator()(std::declval<DataType&>()))
+   auto with_lock_held(CallableType&& callable) -> decltype(callable(std::declval<DataType&>()))
    {
       const auto scopedGuard = lock();
       return callable(static_cast<SubclassType*>(this)->m_data);
@@ -492,7 +491,7 @@ public:
    */
    template<typename CallableType>
    auto with_lock_held(CallableType&& callable) const
-      -> decltype(std::declval<CallableType>().operator()(std::declval<const DataType&>()))
+      -> decltype(callable(std::declval<const DataType&>()))
    {
       const auto scopedGuard = lock();
       return callable(static_cast<const SubclassType*>(this)->m_data);
@@ -737,6 +736,8 @@ public:
    /**
    * @brief Executes the functor only if the mutex can be locked before the timer expires.
    *
+   * This function will be enabled if the functor's return type is void.
+   *
    * @param[in] timeout             The length of time to wait before abandoning the lock
    *                                attempt.
    * @param[in] callable            The functor to be invoked once the underlying mutex has
@@ -764,6 +765,8 @@ public:
 
    /**
    * @brief Executes the functor only if the mutex can be locked before the timer expires.
+   *
+   * This function will be enabled if the functor's return type is not void.
    *
    * @param[in] timeout             The length of time to wait before abandoning the lock
    *                                attempt.
@@ -794,6 +797,8 @@ public:
    /**
    * @brief Executes the functor only if the mutex can be locked before the timer expires.
    *
+   * This function will be enabled if the functor's return type is void.
+   *
    * @param[in] timeout             The length of time to wait before abandoning the lock
    *                                attempt.
    * @param[in] callable            The functor to be invoked once the underlying mutex has
@@ -821,6 +826,8 @@ public:
 
    /**
    * @brief Executes the functor only if the mutex can be locked before the timer expires.
+   *
+   * This function will be enabled if the functor's return type is not void.
    *
    * @param[in] timeout             The length of time to wait before abandoning the lock
    *                                attempt.
