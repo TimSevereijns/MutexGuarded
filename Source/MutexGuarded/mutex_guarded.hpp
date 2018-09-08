@@ -3,6 +3,8 @@
 #include <mutex>
 #include <type_traits>
 
+#include <boost/optional.hpp>
+
 #include "future_std.hpp"
 
 namespace detail
@@ -443,6 +445,8 @@ public:
 
    /**
    * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex.
+   *
+   * @returns An RAII proxy.
    */
    auto lock() -> unique_lock_proxy
    {
@@ -451,6 +455,8 @@ public:
 
    /**
    * @overload
+   *
+   * @returns An RAII proxy.
    */
    auto lock() const -> const_unique_lock_proxy
    {
@@ -461,8 +467,10 @@ public:
    * @brief Locks the underlying mutex, and then executes the passed in functor with the lock held.
    *
    * @param[in] callable            A callable type like a lambda, std::function, etc.
-   *                                This callable type should take its input parameter
-   *                                by reference. Taking the input by value is pointless.
+   *                                This callable type must take its input parameter
+   *                                by reference; avoid taking input by value.
+   *
+   * @returns The result of invoking the functor, provided that the functor returns something.
    */
    template<typename CallableType>
    auto with_lock_held(CallableType&& callable)
@@ -477,7 +485,10 @@ public:
    *
    * @param[in] callable            A callable type like a lambda, std::function, etc.
    *                                This callable type should take its input parameter
-   *                                by const reference. Taking the input by value is pointless.
+   *                                by const reference. Failure to do so will result in compilation
+   *                                failure.
+   *
+   * @returns The result of invoking the functor, provided that the functor returns something.
    */
    template<typename CallableType>
    auto with_lock_held(CallableType&& callable) const
@@ -517,6 +528,8 @@ public:
 
    /**
    * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex.
+   *
+   * @returns An RAII proxy.
    */
    auto lock() -> unique_lock_proxy
    {
@@ -525,6 +538,8 @@ public:
 
    /**
    * @overload
+   *
+   * @returns An RAII proxy.
    */
    auto lock() const -> const_unique_lock_proxy
    {
@@ -534,6 +549,8 @@ public:
    /**
    * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex
    * using the specified timeout.
+   *
+   * @returns An RAII proxy.
    */
    template<typename ChronoType>
    auto try_lock_for(const ChronoType& timeout) -> timed_lock_proxy
@@ -543,6 +560,8 @@ public:
 
    /**
    * @overload
+   *
+   * @returns An RAII proxy.
    */
    template<typename ChronoType>
    auto try_lock_for(const ChronoType& timeout) const -> const_timed_lock_proxy
@@ -573,6 +592,8 @@ public:
    /**
    * @brief Returns a proxy class that will automatically acquire and release an exclusive
    * lock on the underlying mutex.
+   *
+   * @returns An RAII proxy.
    */
    auto write_lock() -> unique_lock_proxy
    {
@@ -582,6 +603,8 @@ public:
    /**
    * @brief Returns a proxy class that will automatically acquire and release a shared
    * lock on the underlying mutex.
+   *
+   * @returns An RAII proxy.
    */
    auto read_lock() const -> shared_lock_proxy
    {
@@ -593,12 +616,14 @@ public:
    * functor with the lock held.
    *
    * @param[in] callable            A callable type like a lambda, std::function, etc.
-   *                                This callable type should take its input parameter
-   *                                by reference. Taking the input by value is pointless.
+   *                                This callable type must take its input parameter
+   *                                by reference; avoid taking input by value.
+   *
+   * @returns The result of invoking the functor, provided that the functor returns something.
    */
    template<typename CallableType>
    auto with_write_lock_held(CallableType&& callable)
-      -> decltype(std::declval<CallableType>().operator()(std::declval<DataType&>()))
+      -> decltype(callable(std::declval<DataType&>()))
    {
       const auto scopedGuard = write_lock();
       return callable(static_cast<SubclassType*>(this)->m_data);
@@ -610,11 +635,14 @@ public:
    *
    * @param[in] callable            A callable type like a lambda, std::function, etc.
    *                                This callable type should take its input parameter
-   *                                by const reference. Taking the input by value is pointless.
+   *                                by const reference. Failure to do so will result in compilation
+   *                                failure.
+   *
+   * @returns The result of invoking the functor, provided that the functor returns something.
    */
    template<typename CallableType>
    auto with_read_lock_held(CallableType&& callable) const
-      -> decltype(std::declval<CallableType>().operator()(std::declval<const DataType&>()))
+      -> decltype(callable(std::declval<const DataType&>()))
    {
       const auto scopedGuard = read_lock();
       return callable(static_cast<const SubclassType*>(this)->m_data);
@@ -649,8 +677,10 @@ public:
       detail::timed_shared_lock_policy>;
 
    /**
-   * @brief Returns a proxy class that will automatically acquire and release an exclusive
+   * @brief Returns a proxy class that will manage the acquisition and release of an exclusive
    * lock on the underlying mutex.
+   *
+   * @returns An RAII proxy.
    */
    auto write_lock() -> unique_lock_proxy
    {
@@ -658,8 +688,10 @@ public:
    }
 
    /**
-   * @brief Returns a proxy class that will automatically acquire and release a shared
+   * @brief Returns a proxy class that will manage the acquisition and release of a shared
    * lock on the underlying mutex.
+   *
+   * @returns An RAII proxy.
    */
    auto read_lock() const -> shared_lock_proxy
    {
@@ -667,8 +699,16 @@ public:
    }
 
    /**
-   * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex
-   * using the specified timeout. Use this function to acquire an exclusive lock.
+   * @brief Returns a proxy class that will manage the acquisition and release of an exclusive
+   * lock on the underlying mutex.
+   *
+   * The validity of the resulting proxy should be checked to see if the lock was acquired before
+   * the timer expired.
+   *
+   * @param[in] timeout             The length of time to wait before abandoning the lock
+   *                                attempt.
+   *
+   * @returns An RAII proxy.
    */
    template<typename ChronoType>
    auto try_write_lock_for(const ChronoType& timeout) -> timed_unique_lock_proxy
@@ -677,13 +717,135 @@ public:
    }
 
    /**
-   * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex
-   * using the specified timeout. Use this function to acquire a shared lock.
+   * @brief Returns a proxy class that will manage the acquisition and release of a shared
+   * lock on the underlying mutex.
+   *
+   * The validity of the resulting proxy should be checked to see if the lock was acquired before
+   * the timer expired.
+   *
+   * @param[in] timeout             The length of time to wait before abandoning the lock
+   *                                attempt.
+   *
+   * @returns An RAII proxy.
    */
    template<typename ChronoType>
    auto try_read_lock_for(const ChronoType& timeout) const -> timed_shared_lock_proxy
    {
       return { static_cast<const SubclassType*>(this), timeout };
+   }
+
+   /**
+   * @brief Executes the functor only if the mutex can be locked before the timer expires.
+   *
+   * @param[in] timeout             The length of time to wait before abandoning the lock
+   *                                attempt.
+   * @param[in] callable            The functor to be invoked once the underlying mutex has
+   *                                been locked.
+   *
+   * @returns True if a lock was aqcuired on the mutex; false otherwise.
+   */
+   template<
+      typename ChronoType,
+      typename CallableType>
+   auto try_with_write_lock_held_for(const ChronoType& timeout, CallableType&& callable)
+      -> typename std::enable_if<
+         std::is_same<decltype(callable(std::declval<DataType&>())), void>::value,
+         bool>::type
+   {
+      const auto lockProxy = try_write_lock_for(timeout);
+      if (lockProxy.is_valid())
+      {
+         callable(static_cast<SubclassType*>(this)->m_data);
+         return true;
+      }
+
+      return false;
+   }
+
+   /**
+   * @brief Executes the functor only if the mutex can be locked before the timer expires.
+   *
+   * @param[in] timeout             The length of time to wait before abandoning the lock
+   *                                attempt.
+   * @param[in] callable            The functor to be invoked once the underlying mutex has
+   *                                been locked.
+   *
+   * @returns An optional containing the result of invoking the functor if a lock on the
+   * mutex was obtained. If the lock could not be obtained, an empty optional is returned
+   * instead.
+   */
+   template<
+      typename ChronoType,
+      typename CallableType>
+   auto try_with_write_lock_held_for(const ChronoType& timeout, CallableType&& callable)
+      -> typename std::enable_if<
+         !std::is_same<decltype(callable(std::declval<DataType&>())), void>::value,
+         boost::optional<decltype(callable(std::declval<DataType&>()))>>::type
+   {
+      const auto lockProxy = try_write_lock_for(timeout);
+      if (lockProxy.is_valid())
+      {
+         return callable(static_cast<SubclassType*>(this)->m_data);
+      }
+
+      return { };
+   }
+
+   /**
+   * @brief Executes the functor only if the mutex can be locked before the timer expires.
+   *
+   * @param[in] timeout             The length of time to wait before abandoning the lock
+   *                                attempt.
+   * @param[in] callable            The functor to be invoked once the underlying mutex has
+   *                                been locked.
+   *
+   * @returns True if a lock was aqcuired on the mutex; false otherwise.
+   */
+   template<
+      typename ChronoType,
+      typename CallableType>
+   auto try_with_read_lock_held_for(const ChronoType& timeout, CallableType&& callable) const
+      -> typename std::enable_if<
+         std::is_same<decltype(callable(std::declval<const DataType&>())), void>::value,
+         bool>::type
+   {
+      const auto lockProxy = try_write_lock_for(timeout);
+      if (lockProxy.is_valid())
+      {
+         callable(static_cast<const SubclassType*>(this)->m_data);
+         return true;
+      }
+
+      return false;
+   }
+
+   /**
+   * @brief Executes the functor only if the mutex can be locked before the timer expires.
+   *
+   * @param[in] timeout             The length of time to wait before abandoning the lock
+   *                                attempt.
+   * @param[in] callable            The functor to be invoked once the underlying mutex has
+   *                                been locked.
+   *
+   * @returns An optional containing the result of invoking the functor if a lock on the
+   * mutex was obtained. If the lock could not be obtained, an empty optional is returned
+   * instead.
+   */
+   template<
+      typename ChronoType,
+      typename CallableType>
+   auto try_with_read_lock_held_for(const ChronoType& timeout, CallableType&& callable) const
+      -> typename std::enable_if<
+         !std::is_same<decltype(callable(std::declval<const DataType&>())), void>::value,
+         boost::optional<decltype(callable(std::declval<const DataType&>()))>>::type
+   {
+      const auto lockProxy = try_read_lock_for(timeout);
+      if (lockProxy.is_valid())
+      {
+         return callable(static_cast<const SubclassType*>(this)->m_data);
+      }
+
+      return { };
    }
 };
 
@@ -705,8 +867,8 @@ namespace detail
 * @brief A light-weight wrapper that ensures that all reads and writes from and to the supplied
 * data type are guarded by a mutex.
 *
-* This class uses template metaprogramming to inherit functionality appropriate to the specified
-* mutex. See the various `mutex_guard_imp<...>` classes for further documentation.
+* This class uses template metaprogramming to statically inherit functionality appropriate to the
+* specified mutex. See the various `mutex_guard_imp<...>` classes for further documentation.
 */
 template<
    typename DataType,
