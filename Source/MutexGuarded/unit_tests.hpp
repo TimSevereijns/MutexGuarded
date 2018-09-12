@@ -248,7 +248,6 @@ TEST_CASE("Guarded with a std::mutex", "[Std]")
       const std::size_t length = data.with_lock_held([] (const std::string& value) noexcept
       {
          REQUIRE(detail::global::tracker.was_locked == true);
-         //std::cout << "   In lambda...\n";
 
          return value.length();
       });
@@ -290,7 +289,6 @@ TEST_CASE("Guarded with a boost::recursive_mutex", "[Boost]")
       const std::size_t length = data.with_lock_held([] (const std::string& value) noexcept
       {
          REQUIRE(detail::global::tracker.was_locked == true);
-         //std::cout << "   In lambda...\n";
 
          return value.length();
       });
@@ -493,7 +491,7 @@ TEST_CASE("Unique Timed Mutex, Part I", "[Std]")
       REQUIRE(detail::global::tracker.was_unlocked == true);
    }
 
-   SECTION("Writing data using a non-void lambda")
+   SECTION("Writing data using a lambda that returns something")
    {
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
@@ -515,7 +513,7 @@ TEST_CASE("Unique Timed Mutex, Part I", "[Std]")
       REQUIRE(detail::global::tracker.was_unlocked == true);
    }
 
-   SECTION("Writing data using a void lambda")
+   SECTION("Writing data using a lambda that returns nothing")
    {
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
@@ -566,7 +564,7 @@ TEST_CASE("Unique Timed Mutex, Part II", "[Std]")
       REQUIRE(detail::global::tracker.was_unlocked == false);
    }
 
-   SECTION("Writing data using a non-void lambda")
+   SECTION("Writing data using a lambda that returns something")
    {
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
@@ -584,10 +582,11 @@ TEST_CASE("Unique Timed Mutex, Part II", "[Std]")
       });
 
       REQUIRE(length.is_initialized() == false);
+      REQUIRE(wasLambdaInvoked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
    }
 
-   SECTION("Writing data using a void lambda")
+   SECTION("Writing data using a lambda that returns nothing")
    {
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
