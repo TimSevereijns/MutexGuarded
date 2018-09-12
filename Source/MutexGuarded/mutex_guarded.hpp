@@ -454,7 +454,7 @@ public:
    }
 
    /**
-   * @overload
+   * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex.
    *
    * @returns An RAII proxy.
    */
@@ -536,7 +536,7 @@ public:
    }
 
    /**
-   * @overload
+   * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex.
    *
    * @returns An RAII proxy.
    */
@@ -558,7 +558,8 @@ public:
    }
 
    /**
-   * @overload
+   * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex
+   * using the specified timeout.
    *
    * @returns An RAII proxy.
    */
@@ -566,6 +567,67 @@ public:
    auto try_lock_for(const ChronoType& timeout) const -> const_timed_lock_proxy
    {
       return { static_cast<const SubclassType*>(this), timeout };
+   }
+
+   /**
+   * @brief Executes the functor only if the mutex can be locked before the timer expires.
+   *
+   * This function will be enabled if the functor's return type is void.
+   *
+   * @param[in] timeout             The length of time to wait before abandoning the lock
+   *                                attempt.
+   * @param[in] callable            The functor to be invoked once the underlying mutex has
+   *                                been locked.
+   *
+   * @returns True if a lock was aqcuired on the mutex; false otherwise.
+   */
+   template<
+      typename ChronoType,
+      typename CallableType>
+   auto try_with_lock_held_for(const ChronoType& timeout, CallableType&& callable)
+      -> typename std::enable_if<
+      std::is_same<decltype(callable(std::declval<DataType&>())), void>::value,
+      bool>::type
+   {
+      const auto lockProxy = try_lock_for(timeout);
+      if (lockProxy.is_valid())
+      {
+         callable(static_cast<SubclassType*>(this)->m_data);
+         return true;
+      }
+
+      return false;
+   }
+
+   /**
+   * @brief Executes the functor only if the mutex can be locked before the timer expires.
+   *
+   * This function will be enabled if the functor's return type is not void.
+   *
+   * @param[in] timeout             The length of time to wait before abandoning the lock
+   *                                attempt.
+   * @param[in] callable            The functor to be invoked once the underlying mutex has
+   *                                been locked.
+   *
+   * @returns An optional containing the result of invoking the functor if a lock on the
+   * mutex was obtained. If the lock could not be obtained, an empty optional is returned
+   * instead.
+   */
+   template<
+      typename ChronoType,
+      typename CallableType>
+   auto try_with_lock_held_for(const ChronoType& timeout, CallableType&& callable)
+      -> typename std::enable_if<
+      !std::is_same<decltype(callable(std::declval<DataType&>())), void>::value,
+      boost::optional<decltype(callable(std::declval<DataType&>()))>>::type
+   {
+      const auto lockProxy = try_lock_for(timeout);
+      if (lockProxy.is_valid())
+      {
+         return callable(static_cast<SubclassType*>(this)->m_data);
+      }
+
+      return { };
    }
 };
 
@@ -897,6 +959,7 @@ public:
    using value_type = DataType;
    using reference = value_type&;
    using const_reference = const value_type&;
+   using mutex_type = MutexType;
 
    mutex_guarded() = default;
    ~mutex_guarded() noexcept = default;
