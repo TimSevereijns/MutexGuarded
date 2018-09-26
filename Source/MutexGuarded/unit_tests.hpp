@@ -154,23 +154,23 @@ TEST_CASE("Trait Detection")
 {
    SECTION("Locking capabilities of std::mutex", "[Std]")
    {
-      REQUIRE(detail::supports_unique_locking<std::mutex>::value == true);
-      REQUIRE(detail::supports_shared_locking<std::mutex>::value == false);
-      REQUIRE(detail::supports_timed_locking<std::mutex>::value == false);
+      REQUIRE(detail::traits::is_mutex<std::mutex>::value == true);
+      REQUIRE(detail::traits::is_shared_mutex<std::mutex>::value == false);
+      REQUIRE(detail::traits::is_timed_mutex<std::mutex>::value == false);
    }
 
    SECTION("Locking capabilities of boost::recursive_mutex", "[Boost]")
    {
-      REQUIRE(detail::supports_unique_locking<boost::recursive_mutex>::value == true);
-      REQUIRE(detail::supports_shared_locking<boost::recursive_mutex>::value == false);
-      REQUIRE(detail::supports_timed_locking<boost::recursive_mutex>::value == false);
+      REQUIRE(detail::traits::is_mutex<boost::recursive_mutex>::value == true);
+      REQUIRE(detail::traits::is_shared_mutex<boost::recursive_mutex>::value == false);
+      REQUIRE(detail::traits::is_timed_mutex<boost::recursive_mutex>::value == false);
    }
 
    SECTION("Locking capabilities of boost::shared_mutex", "[Boost]")
    {
-      REQUIRE(detail::supports_unique_locking<boost::shared_mutex>::value == true);
-      REQUIRE(detail::supports_shared_locking<boost::shared_mutex>::value == true);
-      REQUIRE(detail::supports_timed_locking<boost::shared_mutex>::value == false);
+      REQUIRE(detail::traits::is_mutex<boost::shared_mutex>::value == true);
+      REQUIRE(detail::traits::is_shared_mutex<boost::shared_mutex>::value == true);
+      REQUIRE(detail::traits::is_timed_mutex<boost::shared_mutex>::value == false);
    }
 }
 
@@ -220,9 +220,11 @@ TEST_CASE("Guarded with a std::mutex", "[Std]")
 {
    const std::string sample = "Testing a std::mutex.";
 
+   using ShouldStartUnlocked = std::false_type;
+
    using mutex_type = detail::wrapped_mutex<
       std::mutex,
-      /* ShouldStartLocked = */ std::false_type,
+      ShouldStartUnlocked,
       detail::mutex_category::unique>;
 
    const mutex_guarded<std::string, mutex_type> data{ sample };
@@ -232,7 +234,7 @@ TEST_CASE("Guarded with a std::mutex", "[Std]")
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
 
-      REQUIRE(data.lock().is_valid());
+      REQUIRE(data.lock().is_locked());
       REQUIRE(*data.lock() == sample);
       REQUIRE(data.lock()->length() == sample.length());
 
@@ -261,9 +263,11 @@ TEST_CASE("Guarded with a boost::recursive_mutex", "[Boost]")
 {
    const std::string sample = "Testing a boost::recursive_mutex.";
 
+   using ShouldStartUnlocked = std::false_type;
+
    using mutex_type = detail::wrapped_mutex<
       boost::recursive_mutex,
-      /* ShouldStartLocked = */ std::false_type,
+      ShouldStartUnlocked,
       detail::mutex_category::unique>;
 
    mutex_guarded<std::string, mutex_type> data{ sample };
@@ -273,7 +277,7 @@ TEST_CASE("Guarded with a boost::recursive_mutex", "[Boost]")
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
 
-      REQUIRE(data.lock().is_valid());
+      REQUIRE(data.lock().is_locked());
       REQUIRE(*data.lock() == sample);
       REQUIRE(data.lock()->length() == sample.length());
 
@@ -302,9 +306,11 @@ TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
 {
    const std::string sample = "Testing a boost::shared_mutex.";
 
+   using ShouldStartUnlocked = std::false_type;
+
    using mutex_type = detail::wrapped_mutex<
       boost::shared_mutex,
-      /* ShouldStartLocked = */ std::false_type,
+      ShouldStartUnlocked,
       detail::mutex_category::shared>;
 
    mutex_guarded<std::string, mutex_type> data{ sample };
@@ -314,7 +320,7 @@ TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
 
-      REQUIRE(data.read_lock().is_valid());
+      REQUIRE(data.read_lock().is_locked());
       REQUIRE(*data.read_lock() == sample);
       REQUIRE(data.read_lock()->length() == sample.length());
 
@@ -327,7 +333,7 @@ TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
 
-      REQUIRE(data.write_lock().is_valid());
+      REQUIRE(data.write_lock().is_locked());
       REQUIRE(data.write_lock()->length() == sample.length());
 
       REQUIRE(detail::global::tracker.was_locked == true);
@@ -376,9 +382,11 @@ TEST_CASE("Moves and Copies", "[Std]")
 {
    const std::string sample = "Testing a std::mutex.";
 
+   using ShouldStartUnlocked = std::false_type;
+
    using mutex_type = detail::wrapped_mutex<
       std::mutex,
-      /* ShouldStartLocked = */ std::false_type,
+      ShouldStartUnlocked,
       detail::mutex_category::unique>;
 
    mutex_guarded<std::string, mutex_type> data{ sample };
@@ -420,31 +428,35 @@ TEST_CASE("Const-Correctness")
 
    SECTION("Const-ref to mutable mutex_guarded<..., std::mutex>")
    {
+      using ShouldStartUnlocked = std::false_type;
+
       using mutex_type = detail::wrapped_mutex<
          std::mutex,
-         /* ShouldStartLocked = */ std::false_type,
+         ShouldStartUnlocked,
          detail::mutex_category::unique>;
 
       mutex_guarded<std::string, mutex_type> data{ sample };
 
       const auto& copy = data;
 
-      REQUIRE(copy.lock().is_valid());
+      REQUIRE(copy.lock().is_locked());
       REQUIRE(copy.lock()->length() == sample.length());
    }
 
    SECTION("Const-ref to mutable mutex_guarded<..., boost::shared_mutex>")
    {
+      using ShouldStartUnlocked = std::false_type;
+
       using mutex_type = detail::wrapped_mutex<
          boost::shared_mutex,
-         /* ShouldStartLocked = */ std::false_type,
+         ShouldStartUnlocked,
          detail::mutex_category::shared>;
 
       mutex_guarded<std::string, mutex_type> data{ sample };
 
       const auto& copy = data;
 
-      REQUIRE(copy.read_lock().is_valid());
+      REQUIRE(copy.read_lock().is_locked());
       REQUIRE(copy.read_lock()->length() == sample.length());
 
       // @note Grabbing a write lock on a const-reference to a mutex_guarded<...> instance
@@ -456,9 +468,11 @@ TEST_CASE("Unique Timed Mutex, Part I", "[Std]")
 {
    const std::string sample = "Testing a std::timed_mutex.";
 
+   using ShouldStartUnlocked = std::false_type;
+
    using mutex_type = detail::wrapped_mutex<
       std::timed_mutex,
-      /* ShouldStartLocked = */ std::false_type,
+      ShouldStartUnlocked,
       detail::mutex_category::unique_and_timed>;
 
    mutex_guarded<std::string, mutex_type> data{ sample };
@@ -468,7 +482,7 @@ TEST_CASE("Unique Timed Mutex, Part I", "[Std]")
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
 
-      REQUIRE(data.lock().is_valid());
+      REQUIRE(data.lock().is_locked());
       REQUIRE(*data.lock() == sample);
       REQUIRE(data.lock()->length() == sample.length());
 
@@ -483,7 +497,7 @@ TEST_CASE("Unique Timed Mutex, Part I", "[Std]")
 
       constexpr auto timeout = std::chrono::milliseconds{ 10 };
 
-      REQUIRE(data.try_lock_for(timeout).is_valid());
+      REQUIRE(data.try_lock_for(timeout).is_locked());
       REQUIRE(*data.try_lock_for(timeout) == sample);
       REQUIRE(data.try_lock_for(timeout)->length() == sample.length());
 
@@ -544,9 +558,11 @@ TEST_CASE("Unique Timed Mutex, Part II", "[Std]")
 {
    const std::string sample = "Testing a std::timed_mutex.";
 
+   using ShouldStartLocked = std::true_type;
+
    using mutex_type = detail::wrapped_mutex<
       std::timed_mutex,
-      /* ShouldStartLocked = */ std::true_type,
+      ShouldStartLocked,
       detail::mutex_category::unique_and_timed>;
 
    mutex_guarded<std::string, mutex_type> data{ sample };
@@ -558,7 +574,7 @@ TEST_CASE("Unique Timed Mutex, Part II", "[Std]")
 
       constexpr auto timeout = std::chrono::milliseconds{ 10 };
 
-      REQUIRE(data.try_lock_for(timeout).is_valid() == false);
+      REQUIRE(data.try_lock_for(timeout).is_locked() == false);
 
       REQUIRE(detail::global::tracker.was_locked == false);
       REQUIRE(detail::global::tracker.was_unlocked == false);
