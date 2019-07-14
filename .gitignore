@@ -37,3 +37,4 @@ debug/*
 release/*
 
 .vscode/*
+conan/*
