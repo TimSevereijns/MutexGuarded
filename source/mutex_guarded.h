@@ -5,7 +5,7 @@
 
 #include <boost/optional.hpp>
 
-#include "future_std.hpp"
+#include "future_std.h"
 
 namespace detail
 {

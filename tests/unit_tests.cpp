@@ -1,12 +1,10 @@
-#pragma once
-
 #define CATCH_CONFIG_MAIN
-#include <catch.hpp>
+#include <catch2/catch.hpp>
 
 #include <boost/thread/recursive_mutex.hpp>
 #include <boost/thread/shared_mutex.hpp>
 
-#include "mutex_guarded.hpp"
+#include <mutex_guarded.h>
 
 #include <iostream>
 
