@@ -380,7 +380,7 @@ template <typename ParentType, typename LockPolicyType> class lock_proxy
 
 namespace detail
 {
-template <typename SubclassType, typename DataType, typename TagType> class mutex_guarded_impl
+template <typename DerivedType, typename DataType, typename TagType> class mutex_guarded_impl
 {
 };
 
@@ -388,14 +388,13 @@ template <typename SubclassType, typename DataType, typename TagType> class mute
  * @brief Specialization that provides the functionality to lock and unlock a mutex that supports
  * the Mutex concept.
  */
-template <typename SubclassType, typename DataType>
-class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique>
+template <typename DerivedType, typename DataType>
+class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique>
 {
   public:
-    using unique_lock_proxy = lock_proxy<SubclassType, detail::unique_lock_policy>;
+    using unique_lock_proxy = lock_proxy<DerivedType, detail::unique_lock_policy>;
 
-    using const_unique_lock_proxy =
-        const lock_proxy<const SubclassType, detail::unique_lock_policy>;
+    using const_unique_lock_proxy = const lock_proxy<const DerivedType, detail::unique_lock_policy>;
 
     /**
      * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex.
@@ -404,7 +403,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique>
      */
     auto lock() -> unique_lock_proxy
     {
-        return { static_cast<SubclassType*>(this) };
+        return { static_cast<DerivedType*>(this) };
     }
 
     /**
@@ -414,7 +413,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique>
      */
     auto lock() const -> const_unique_lock_proxy
     {
-        return { static_cast<const SubclassType*>(this) };
+        return { static_cast<const DerivedType*>(this) };
     }
 
     /**
@@ -431,7 +430,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique>
     auto with_lock_held(CallableType&& callable) -> decltype(callable(std::declval<DataType&>()))
     {
         const auto scopedGuard = lock();
-        return callable(static_cast<SubclassType*>(this)->m_data);
+        return callable(static_cast<DerivedType*>(this)->m_data);
     }
 
     /**
@@ -450,7 +449,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique>
         -> decltype(callable(std::declval<const DataType&>()))
     {
         const auto scopedGuard = lock();
-        return callable(static_cast<const SubclassType*>(this)->m_data);
+        return callable(static_cast<const DerivedType*>(this)->m_data);
     }
 };
 
@@ -458,19 +457,18 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique>
  * @brief Specialization that provides the functionality to lock and unlock a mutex that supports
  * the TimedMutex concept.
  */
-template <typename SubclassType, typename DataType>
-class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique_and_timed>
+template <typename DerivedType, typename DataType>
+class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_and_timed>
 {
   public:
-    using timed_lock_proxy = lock_proxy<SubclassType, detail::timed_unique_lock_policy>;
+    using timed_lock_proxy = lock_proxy<DerivedType, detail::timed_unique_lock_policy>;
 
     using const_timed_lock_proxy =
-        const lock_proxy<const SubclassType, detail::timed_unique_lock_policy>;
+        const lock_proxy<const DerivedType, detail::timed_unique_lock_policy>;
 
-    using unique_lock_proxy = lock_proxy<SubclassType, detail::unique_lock_policy>;
+    using unique_lock_proxy = lock_proxy<DerivedType, detail::unique_lock_policy>;
 
-    using const_unique_lock_proxy =
-        const lock_proxy<const SubclassType, detail::unique_lock_policy>;
+    using const_unique_lock_proxy = const lock_proxy<const DerivedType, detail::unique_lock_policy>;
 
     /**
      * @brief Returns a proxy class that will automatically lock and unlock the underlying mutex.
@@ -479,7 +477,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique_
      */
     auto lock() -> unique_lock_proxy
     {
-        return { static_cast<SubclassType*>(this) };
+        return { static_cast<DerivedType*>(this) };
     }
 
     /**
@@ -489,7 +487,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique_
      */
     auto lock() const -> const_unique_lock_proxy
     {
-        return { static_cast<const SubclassType*>(this) };
+        return { static_cast<const DerivedType*>(this) };
     }
 
     /**
@@ -500,7 +498,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique_
      */
     template <typename ChronoType> auto try_lock_for(const ChronoType& timeout) -> timed_lock_proxy
     {
-        return { static_cast<SubclassType*>(this), timeout };
+        return { static_cast<DerivedType*>(this), timeout };
     }
 
     /**
@@ -512,7 +510,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique_
     template <typename ChronoType>
     auto try_lock_for(const ChronoType& timeout) const -> const_timed_lock_proxy
     {
-        return { static_cast<const SubclassType*>(this), timeout };
+        return { static_cast<const DerivedType*>(this), timeout };
     }
 
     /**
@@ -534,7 +532,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique_
     {
         const auto proxy = try_lock_for(timeout);
         if (proxy.is_locked()) {
-            callable(static_cast<SubclassType*>(this)->m_data);
+            callable(static_cast<DerivedType*>(this)->m_data);
             return true;
         }
 
@@ -563,7 +561,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique_
     {
         const auto proxy = try_lock_for(timeout);
         if (proxy.is_locked()) {
-            return callable(static_cast<SubclassType*>(this)->m_data);
+            return callable(static_cast<DerivedType*>(this)->m_data);
         }
 
         return {};
@@ -574,13 +572,13 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::unique_
  * @brief Specialization that provides the functionality to lock and unlock a mutex that supports
  * the SharedMutex concept.
  */
-template <typename SubclassType, typename DataType>
-class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared>
+template <typename DerivedType, typename DataType>
+class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared>
 {
   public:
-    using shared_lock_proxy = const lock_proxy<const SubclassType, detail::shared_lock_policy>;
+    using shared_lock_proxy = const lock_proxy<const DerivedType, detail::shared_lock_policy>;
 
-    using unique_lock_proxy = lock_proxy<SubclassType, detail::unique_lock_policy>;
+    using unique_lock_proxy = lock_proxy<DerivedType, detail::unique_lock_policy>;
 
     /**
      * @brief Returns a proxy class that will automatically acquire and release an exclusive
@@ -590,7 +588,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared>
      */
     auto write_lock() -> unique_lock_proxy
     {
-        return { static_cast<SubclassType*>(this) };
+        return { static_cast<DerivedType*>(this) };
     }
 
     /**
@@ -601,7 +599,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared>
      */
     auto read_lock() const -> shared_lock_proxy
     {
-        return { static_cast<const SubclassType*>(this) };
+        return { static_cast<const DerivedType*>(this) };
     }
 
     /**
@@ -619,7 +617,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared>
         -> decltype(callable(std::declval<DataType&>()))
     {
         const auto scopedGuard = write_lock();
-        return callable(static_cast<SubclassType*>(this)->m_data);
+        return callable(static_cast<DerivedType*>(this)->m_data);
     }
 
     /**
@@ -638,7 +636,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared>
         -> decltype(callable(std::declval<const DataType&>()))
     {
         const auto scopedGuard = read_lock();
-        return callable(static_cast<const SubclassType*>(this)->m_data);
+        return callable(static_cast<const DerivedType*>(this)->m_data);
     }
 };
 
@@ -646,18 +644,18 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared>
  * @brief Specialization that provides the functionality to lock and unlock a mutex that supports
  * the SharedTimedMutex concept.
  */
-template <typename SubclassType, typename DataType>
-class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared_and_timed>
+template <typename DerivedType, typename DataType>
+class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_and_timed>
 {
   public:
-    using unique_lock_proxy = lock_proxy<SubclassType, detail::unique_lock_policy>;
+    using unique_lock_proxy = lock_proxy<DerivedType, detail::unique_lock_policy>;
 
-    using shared_lock_proxy = const lock_proxy<const SubclassType, detail::shared_lock_policy>;
+    using shared_lock_proxy = const lock_proxy<const DerivedType, detail::shared_lock_policy>;
 
-    using timed_unique_lock_proxy = lock_proxy<SubclassType, detail::timed_unique_lock_policy>;
+    using timed_unique_lock_proxy = lock_proxy<DerivedType, detail::timed_unique_lock_policy>;
 
     using timed_shared_lock_proxy =
-        const lock_proxy<const SubclassType, detail::timed_shared_lock_policy>;
+        const lock_proxy<const DerivedType, detail::timed_shared_lock_policy>;
 
     /**
      * @brief Returns a proxy class that will manage the acquisition and release of an exclusive
@@ -667,7 +665,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared_
      */
     auto write_lock() -> unique_lock_proxy
     {
-        return { static_cast<SubclassType*>(this) };
+        return { static_cast<DerivedType*>(this) };
     }
 
     /**
@@ -678,7 +676,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared_
      */
     auto read_lock() const -> shared_lock_proxy
     {
-        return { static_cast<const SubclassType*>(this) };
+        return { static_cast<const DerivedType*>(this) };
     }
 
     /**
@@ -696,7 +694,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared_
     template <typename ChronoType>
     auto try_write_lock_for(const ChronoType& timeout) -> timed_unique_lock_proxy
     {
-        return { static_cast<SubclassType*>(this), timeout };
+        return { static_cast<DerivedType*>(this), timeout };
     }
 
     /**
@@ -714,7 +712,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared_
     template <typename ChronoType>
     auto try_read_lock_for(const ChronoType& timeout) const -> timed_shared_lock_proxy
     {
-        return { static_cast<const SubclassType*>(this), timeout };
+        return { static_cast<const DerivedType*>(this), timeout };
     }
 
     /**
@@ -736,7 +734,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared_
     {
         const auto proxy = try_write_lock_for(timeout);
         if (proxy.is_locked()) {
-            callable(static_cast<SubclassType*>(this)->m_data);
+            callable(static_cast<DerivedType*>(this)->m_data);
             return true;
         }
 
@@ -765,7 +763,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared_
     {
         const auto proxy = try_write_lock_for(timeout);
         if (proxy.is_locked()) {
-            return callable(static_cast<SubclassType*>(this)->m_data);
+            return callable(static_cast<DerivedType*>(this)->m_data);
         }
 
         return {};
@@ -791,7 +789,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared_
     {
         const auto proxy = try_write_lock_for(timeout);
         if (proxy.is_locked()) {
-            callable(static_cast<const SubclassType*>(this)->m_data);
+            callable(static_cast<const DerivedType*>(this)->m_data);
             return true;
         }
 
@@ -820,7 +818,7 @@ class mutex_guarded_impl<SubclassType, DataType, detail::mutex_category::shared_
     {
         const auto proxy = try_read_lock_for(timeout);
         if (proxy.is_locked()) {
-            return callable(static_cast<const SubclassType*>(this)->m_data);
+            return callable(static_cast<const DerivedType*>(this)->m_data);
         }
 
         return {};
