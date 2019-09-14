@@ -23,23 +23,18 @@ void reset_tracker() noexcept
 }
 } // namespace global
 
-template <typename MutexType, typename ShouldStartLocked, typename TagType> class wrapped_mutex
-{
-};
-
-template <typename MutexType, typename ShouldStartLocked>
-class wrapped_mutex<MutexType, ShouldStartLocked, detail::mutex_category::unique>
+template <typename MutexType> class wrapped_unique_mutex
 {
   public:
-    wrapped_mutex()
+    wrapped_unique_mutex()
     {
         global::reset_tracker();
     }
 
     void lock()
     {
-        global::tracker.was_locked = true;
         m_mutex.lock();
+        global::tracker.was_locked = true;
     }
 
     bool try_lock()
@@ -57,26 +52,25 @@ class wrapped_mutex<MutexType, ShouldStartLocked, detail::mutex_category::unique
     mutable MutexType m_mutex;
 };
 
-template <typename MutexType, typename ShouldStartLocked>
-class wrapped_mutex<MutexType, ShouldStartLocked, detail::mutex_category::shared>
-    : public wrapped_mutex<MutexType, ShouldStartLocked, detail::mutex_category::unique>
+template <typename MutexType> class wrapped_shared_mutex : public wrapped_unique_mutex<MutexType>
 {
   public:
-    wrapped_mutex()
+    wrapped_shared_mutex()
     {
         global::reset_tracker();
     }
 
     void lock_shared()
     {
-        global::tracker.was_locked = true;
         m_mutex.lock_shared();
+        global::tracker.was_locked = true;
     }
 
     bool try_lock_shared()
     {
-        global::tracker.was_locked = true;
-        return m_mutex.try_lock_shared();
+        const auto successfully_locked = m_mutex.try_lock_shared();
+        global::tracker.was_locked = successfully_locked;
+        return successfully_locked;
     }
 
     void unlock_shared()
@@ -89,11 +83,11 @@ class wrapped_mutex<MutexType, ShouldStartLocked, detail::mutex_category::shared
     mutable MutexType m_mutex;
 };
 
-template <typename MutexType, typename ShouldStartLocked>
-class wrapped_mutex<MutexType, ShouldStartLocked, detail::mutex_category::unique_and_timed>
+template <typename MutexType, typename ShouldStartLocked = std::false_type>
+class wrapped_unique_and_timed_mutex
 {
   public:
-    wrapped_mutex()
+    wrapped_unique_and_timed_mutex()
     {
         if (ShouldStartLocked::value) {
             m_mutex.lock();
@@ -104,23 +98,22 @@ class wrapped_mutex<MutexType, ShouldStartLocked, detail::mutex_category::unique
 
     void lock()
     {
-        global::tracker.was_locked = true;
         m_mutex.lock();
+        global::tracker.was_locked = true;
     }
 
     template <class Rep, class Period>
     bool try_lock_for(const std::chrono::duration<Rep, Period>& timeout)
     {
-        const auto wasLocked = m_mutex.try_lock_for(timeout);
-        global::tracker.was_locked = wasLocked;
-
-        return wasLocked;
+        const auto successfully_locked = m_mutex.try_lock_for(timeout);
+        global::tracker.was_locked = successfully_locked;
+        return successfully_locked;
     }
 
     void unlock()
     {
-        global::tracker.was_unlocked = true;
         m_mutex.unlock();
+        global::tracker.was_unlocked = true;
     }
 
   private:
@@ -166,31 +159,21 @@ TEST_CASE("Simple sanity checks")
         STATIC_REQUIRE(std::is_same<mutex_guarded<std::string>::mutex_type, std::mutex>::value);
 
         STATIC_REQUIRE(
-            std::is_same<
-                lock_proxy<mutex_guarded<std::string>, detail::mutex_category::unique>::value_type,
-                std::string>::value);
+            std::is_same<lock_proxy<mutex_guarded<std::string>>::value_type, std::string>::value);
+
+        STATIC_REQUIRE(
+            std::is_same<lock_proxy<mutex_guarded<std::string>>::pointer, std::string*>::value);
 
         STATIC_REQUIRE(
             std::is_same<
-                lock_proxy<mutex_guarded<std::string>, detail::mutex_category::unique>::pointer,
-                std::string*>::value);
+                lock_proxy<mutex_guarded<std::string>>::const_pointer, const std::string*>::value);
 
         STATIC_REQUIRE(
-            std::is_same<
-                lock_proxy<
-                    mutex_guarded<std::string>, detail::mutex_category::unique>::const_pointer,
-                const std::string*>::value);
+            std::is_same<lock_proxy<mutex_guarded<std::string>>::reference, std::string&>::value);
 
-        STATIC_REQUIRE(
-            std::is_same<
-                lock_proxy<mutex_guarded<std::string>, detail::mutex_category::unique>::reference,
-                std::string&>::value);
-
-        STATIC_REQUIRE(
-            std::is_same<
-                lock_proxy<
-                    mutex_guarded<std::string>, detail::mutex_category::unique>::const_reference,
-                const std::string&>::value);
+        STATIC_REQUIRE(std::is_same<
+                       lock_proxy<mutex_guarded<std::string>>::const_reference,
+                       const std::string&>::value);
     }
 }
 
@@ -198,11 +181,7 @@ TEST_CASE("Guarded with a std::mutex", "[Std]")
 {
     const std::string sample = "Testing a std::mutex.";
 
-    using ShouldStartUnlocked = std::false_type;
-
-    using mutex_type =
-        detail::wrapped_mutex<std::mutex, ShouldStartUnlocked, detail::mutex_category::unique>;
-
+    using mutex_type = detail::wrapped_unique_mutex<std::mutex>;
     const mutex_guarded<std::string, mutex_type> data{ sample };
 
     SECTION("Locking")
@@ -238,10 +217,7 @@ TEST_CASE("Guarded with a boost::recursive_mutex", "[Boost]")
 {
     const std::string sample = "Testing a boost::recursive_mutex.";
 
-    using ShouldStartUnlocked = std::false_type;
-
-    using mutex_type = detail::wrapped_mutex<
-        boost::recursive_mutex, ShouldStartUnlocked, detail::mutex_category::unique>;
+    using mutex_type = detail::wrapped_unique_mutex<boost::recursive_mutex>;
 
     mutex_guarded<std::string, mutex_type> data{ sample };
 
@@ -278,11 +254,7 @@ TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
 {
     const std::string sample = "Testing a boost::shared_mutex.";
 
-    using ShouldStartUnlocked = std::false_type;
-
-    using mutex_type = detail::wrapped_mutex<
-        boost::shared_mutex, ShouldStartUnlocked, detail::mutex_category::shared>;
-
+    using mutex_type = detail::wrapped_shared_mutex<boost::shared_mutex>;
     mutex_guarded<std::string, mutex_type> data{ sample };
 
     SECTION("Read Locking")
@@ -350,18 +322,14 @@ TEST_CASE("Moves and Copies", "[Std]")
 {
     const std::string sample = "Testing a std::mutex.";
 
-    using ShouldStartUnlocked = std::false_type;
-
-    using mutex_type =
-        detail::wrapped_mutex<std::mutex, ShouldStartUnlocked, detail::mutex_category::unique>;
-
+    using mutex_type = detail::wrapped_unique_mutex<std::mutex>;
     mutex_guarded<std::string, mutex_type> data{ sample };
 
     SECTION("Copy-assignment")
     {
         auto copy = data;
 
-        // Making a copy should lock the source object:
+        // Making a copy should require lock acquisition:
         REQUIRE(detail::global::tracker.was_locked == true);
         REQUIRE(detail::global::tracker.was_unlocked == true);
 
@@ -377,12 +345,14 @@ TEST_CASE("Moves and Copies", "[Std]")
     {
         const auto copy = std::move(data);
 
-        // Moving should not require locking:
+        // For moves, we assume we're dealing with true r-values, meaning that
+        // lock acquisition shouldn't be necessary:
         REQUIRE(detail::global::tracker.was_locked == false);
         REQUIRE(detail::global::tracker.was_unlocked == false);
 
         REQUIRE(copy.lock()->length() == sample.length());
 
+        // Accessing the data should, of course, require lock acquisition:
         REQUIRE(detail::global::tracker.was_locked == true);
         REQUIRE(detail::global::tracker.was_unlocked == true);
     }
@@ -394,11 +364,7 @@ TEST_CASE("Const-Correctness")
 
     SECTION("Const-ref to mutable mutex_guarded<..., std::mutex>")
     {
-        using ShouldStartUnlocked = std::false_type;
-
-        using mutex_type =
-            detail::wrapped_mutex<std::mutex, ShouldStartUnlocked, detail::mutex_category::unique>;
-
+        using mutex_type = detail::wrapped_unique_mutex<std::mutex>;
         mutex_guarded<std::string, mutex_type> data{ sample };
 
         const auto& copy = data;
@@ -409,11 +375,7 @@ TEST_CASE("Const-Correctness")
 
     SECTION("Const-ref to mutable mutex_guarded<..., boost::shared_mutex>")
     {
-        using ShouldStartUnlocked = std::false_type;
-
-        using mutex_type = detail::wrapped_mutex<
-            boost::shared_mutex, ShouldStartUnlocked, detail::mutex_category::shared>;
-
+        using mutex_type = detail::wrapped_shared_mutex<boost::shared_mutex>;
         mutex_guarded<std::string, mutex_type> data{ sample };
 
         const auto& copy = data;
@@ -430,11 +392,7 @@ TEST_CASE("Unique Timed Mutex, Part I", "[Std]")
 {
     const std::string sample = "Testing a std::timed_mutex.";
 
-    using ShouldStartUnlocked = std::false_type;
-
-    using mutex_type = detail::wrapped_mutex<
-        std::timed_mutex, ShouldStartUnlocked, detail::mutex_category::unique_and_timed>;
-
+    using mutex_type = detail::wrapped_unique_and_timed_mutex<std::timed_mutex>;
     mutex_guarded<std::string, mutex_type> data{ sample };
 
     SECTION("Basic non-timed locking")
@@ -516,9 +474,7 @@ TEST_CASE("Unique Timed Mutex, Part II", "[Std]")
 
     using ShouldStartLocked = std::true_type;
 
-    using mutex_type = detail::wrapped_mutex<
-        std::timed_mutex, ShouldStartLocked, detail::mutex_category::unique_and_timed>;
-
+    using mutex_type = detail::wrapped_unique_and_timed_mutex<std::timed_mutex, ShouldStartLocked>;
     mutex_guarded<std::string, mutex_type> data{ sample };
 
     SECTION("Basic timed locking")

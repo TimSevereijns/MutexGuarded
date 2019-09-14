@@ -5,7 +5,21 @@
 
 #include <boost/optional.hpp>
 
-#include "future_std.h"
+namespace future_std
+{
+namespace std17
+{
+namespace detail
+{
+template <typename...> struct make_void
+{
+    using type = void;
+};
+} // namespace detail
+
+template <typename... T> using void_t = typename detail::make_void<T...>::type;
+} // namespace std17
+} // namespace future_std
 
 namespace detail
 {
@@ -196,8 +210,8 @@ struct mutex_traits : mutex_traits_impl<
  *
  * Function mapping:
  *
- *     lock()   -> lock()
- *     unlock() -> unlock()
+ *     lock()   --> lock()
+ *     unlock() --> unlock()
  */
 struct unique_lock_policy
 {
@@ -217,8 +231,8 @@ struct unique_lock_policy
  *
  * Function mapping:
  *
- *     lock()->lock_shared()
- *     unlock()->unlock_shared()
+ *     lock()   --> lock_shared()
+ *     unlock() --> unlock_shared()
  */
 struct shared_lock_policy
 {
@@ -248,8 +262,8 @@ struct shared_lock_policy
  *
  * Function mapping:
  *
- *     lock()->try_lock_for()
- *     unlock()->unlock()
+ *     lock()   --> try_lock_for()
+ *     unlock() --> unlock()
  */
 struct timed_unique_lock_policy
 {
@@ -280,8 +294,8 @@ struct timed_unique_lock_policy
  *
  * Function mapping:
  *
- *     lock()->try_lock_shared_for()
- *     unlock()->unlock_shared()
+ *     lock()   --> try_lock_shared_for()
+ *     unlock() --> unlock_shared()
  */
 struct timed_shared_lock_policy
 {
@@ -314,10 +328,14 @@ struct timed_shared_lock_policy
  * @brief A RAII proxy that allows the guarded data to be accessed only after the associated mutex
  * has been locked.
  */
-template <typename ParentType, typename LockPolicyType> class lock_proxy
+template <
+    typename BaseType,
+    typename LockPolicyType =
+        typename detail::mutex_traits<typename BaseType::mutex_type>::category_type>
+class lock_proxy
 {
   public:
-    using value_type = typename ParentType::value_type;
+    using value_type = typename BaseType::value_type;
 
     using pointer = value_type*;
     using const_pointer = const value_type*;
@@ -325,57 +343,57 @@ template <typename ParentType, typename LockPolicyType> class lock_proxy
     using reference = value_type&;
     using const_reference = const value_type&;
 
-    lock_proxy(ParentType* parent) : m_parent{ parent }
+    lock_proxy(BaseType* base) : m_base{ base }
     {
-        assert(parent);
+        assert(base);
 
-        LockPolicyType::lock(parent->m_mutex);
+        LockPolicyType::lock(m_base->m_mutex);
     }
 
-    template <typename ChronoType> lock_proxy(ParentType* parent, const ChronoType& timeout)
+    template <typename ChronoType> lock_proxy(BaseType* base, const ChronoType& timeout)
     {
-        assert(parent);
+        assert(base);
 
-        const auto wasLocked = LockPolicyType::lock(parent->m_mutex, timeout);
-        m_parent = wasLocked ? parent : nullptr;
+        const auto wasLocked = LockPolicyType::lock(base->m_mutex, timeout);
+        m_base = wasLocked ? base : nullptr;
     }
 
     ~lock_proxy() noexcept
     {
-        if (m_parent) {
-            LockPolicyType::unlock(m_parent->m_mutex);
+        if (m_base) {
+            LockPolicyType::unlock(m_base->m_mutex);
         }
     }
 
     auto is_locked() const -> bool
     {
-        return m_parent != nullptr;
+        return m_base != nullptr;
     }
 
     auto operator-> () noexcept -> pointer
     {
-        return &m_parent->m_data;
+        return &m_base->m_data;
     }
 
     auto operator-> () const noexcept -> const_pointer
     {
-        return &m_parent->m_data;
+        return &m_base->m_data;
     }
 
     auto operator*() noexcept -> reference
     {
-        return m_parent->m_data;
+        return m_base->m_data;
     }
 
     auto operator*() const noexcept -> const_reference
     {
-        return m_parent->m_data;
+        return m_base->m_data;
     }
 
   private:
     typename std::conditional<
-        std::is_const<ParentType>::value, typename std::add_pointer<const ParentType>::type,
-        typename std::add_pointer<ParentType>::type>::type m_parent = nullptr;
+        std::is_const<BaseType>::value, typename std::add_pointer<const BaseType>::type,
+        typename std::add_pointer<BaseType>::type>::type m_base = nullptr;
 };
 
 namespace detail
@@ -840,9 +858,9 @@ using mutex_guarded_base = detail::mutex_guarded_impl<
  * @brief A light-weight wrapper that ensures that all reads and writes from and to the supplied
  * data type are guarded by a mutex.
  *
- * This class uses template metaprogramming to statically inherit functionality appropriate to the
- * specified mutex. See the various `detail::mutex_guard_impl<...>` classes for further
- * documentation.
+ * This class uses the Curiously Recurring Template Patern (CRTP) and template metaprogramming to
+ * statically inherit functionality appropriate to the specified mutex. See the various
+ * `detail::mutex_guard_impl<...>` classes for further documentation.
  */
 template <typename DataType, typename MutexType = std::mutex>
 class mutex_guarded : public detail::mutex_guarded_base<DataType, MutexType>
