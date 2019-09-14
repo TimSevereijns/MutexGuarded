@@ -858,7 +858,7 @@ using mutex_guarded_base = detail::mutex_guarded_impl<
  * @brief A light-weight wrapper that ensures that all reads and writes from and to the supplied
  * data type are guarded by a mutex.
  *
- * This class uses the Curiously Recurring Template Patern (CRTP) and template metaprogramming to
+ * This class uses the Curiously Recurring Template Pattern (CRTP) and template metaprogramming to
  * statically inherit functionality appropriate to the specified mutex. See the various
  * `detail::mutex_guard_impl<...>` classes for further documentation.
  */
