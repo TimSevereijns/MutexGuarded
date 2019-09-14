@@ -14,7 +14,6 @@ set(CMAKE_CXX_OUTPUT_EXTENSION_REPLACE ON)
 
 set(SOURCES
     tests/unit_tests.cpp
-    source/future_std.h
     source/mutex_guarded.h
     source/boost_mutex_traits.h)
 
