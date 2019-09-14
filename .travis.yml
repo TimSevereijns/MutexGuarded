@@ -1,5 +1,5 @@
 dist: bionic
-sudo: true
+sudo: false
 language: cpp
 compiler:
   - gcc
@@ -24,7 +24,7 @@ install:
   - sudo update-alternatives --config g++
   - sudo update-alternatives --config gcov
 script:
-  - pip install conan
+  - pip install conan --user
   - mkdir conan && cd conan
   - conan install ..
   - cd ..
