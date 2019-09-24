@@ -1,5 +1,7 @@
 # Mutex Guarded
 
+[![codecov](https://codecov.io/gh/TimSevereijns/MutexGuarded/branch/master/graph/badge.svg)](https://codecov.io/gh/TimSevereijns/MutexGuarded)
+
 `mutex_guarded<DataType, MutexType>` is a lightweight utility class that wraps an instance of `DataType`, and ensures that it can only be accessed by locking the `MutexType` instance associated with it. Here's a brief example: 
 
 ```C++
