@@ -38,3 +38,5 @@ release/*
 
 .vscode/*
 conan/*
+
+CMakeLists.txt.user

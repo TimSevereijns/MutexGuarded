@@ -1,8 +1,10 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
-#include <boost/thread/recursive_mutex.hpp>
 #include <boost/thread/shared_mutex.hpp>
+#include <boost/thread/recursive_mutex.hpp>
+
+#include <shared_mutex>
 
 #include <mutex_guarded.h>
 
@@ -119,6 +121,43 @@ class wrapped_unique_and_timed_mutex
   private:
     mutable MutexType m_mutex;
 };
+
+template <typename MutexType, typename ShouldStartLocked = std::false_type>
+class wrapped_shared_and_timed_mutex : public wrapped_unique_and_timed_mutex<MutexType>
+{
+  public:
+    wrapped_shared_and_timed_mutex()
+    {
+        if (ShouldStartLocked::value) {
+            m_mutex.lock();
+        }
+
+        global::reset_tracker();
+    }
+
+    void lock_shared()
+    {
+        m_mutex.lock_shared();
+        global::tracker.was_locked = true;
+    }
+
+    template <class Rep, class Period>
+    bool try_lock_shared_for(const std::chrono::duration<Rep, Period>& timeout)
+    {
+        const auto successfully_locked = m_mutex.try_lock_shared_for(timeout);
+        global::tracker.was_locked = successfully_locked;
+        return successfully_locked;
+    }
+
+    void unlock_shared()
+    {
+        m_mutex.unlock_shared();
+        global::tracker.was_unlocked = true;
+    }
+
+  private:
+    mutable MutexType m_mutex;
+};
 } // namespace detail
 
 TEST_CASE("Trait Detection")
@@ -128,6 +167,13 @@ TEST_CASE("Trait Detection")
         STATIC_REQUIRE(detail::traits::is_mutex<std::mutex>::value == true);
         STATIC_REQUIRE(detail::traits::is_shared_mutex<std::mutex>::value == false);
         STATIC_REQUIRE(detail::traits::is_timed_mutex<std::mutex>::value == false);
+    }
+
+    SECTION("Locking capabilities of std::shared_timed_mutex", "[Std]")
+    {
+        STATIC_REQUIRE(detail::traits::is_mutex<std::shared_timed_mutex>::value == true);
+        STATIC_REQUIRE(detail::traits::is_shared_mutex<std::shared_timed_mutex>::value == true);
+        STATIC_REQUIRE(detail::traits::is_timed_mutex<std::shared_timed_mutex>::value == true);
     }
 
     SECTION("Locking capabilities of boost::recursive_mutex", "[Boost]")
@@ -149,31 +195,30 @@ TEST_CASE("Simple sanity checks")
 {
     SECTION("Verifying type-definitions")
     {
-        STATIC_REQUIRE(std::is_same<mutex_guarded<std::string>::value_type, std::string>::value);
+        STATIC_REQUIRE(std::is_same_v<mutex_guarded<std::string>::value_type, std::string>);
 
-        STATIC_REQUIRE(std::is_same<mutex_guarded<std::string>::reference, std::string&>::value);
-
-        STATIC_REQUIRE(
-            std::is_same<mutex_guarded<std::string>::const_reference, const std::string&>::value);
-
-        STATIC_REQUIRE(std::is_same<mutex_guarded<std::string>::mutex_type, std::mutex>::value);
+        STATIC_REQUIRE(std::is_same_v<mutex_guarded<std::string>::reference, std::string&>);
 
         STATIC_REQUIRE(
-            std::is_same<lock_proxy<mutex_guarded<std::string>>::value_type, std::string>::value);
+            std::is_same_v<mutex_guarded<std::string>::const_reference, const std::string&>);
+
+        STATIC_REQUIRE(std::is_same_v<mutex_guarded<std::string>::mutex_type, std::mutex>);
 
         STATIC_REQUIRE(
-            std::is_same<lock_proxy<mutex_guarded<std::string>>::pointer, std::string*>::value);
+            std::is_same_v<lock_proxy<mutex_guarded<std::string>>::value_type, std::string>);
 
         STATIC_REQUIRE(
-            std::is_same<
-                lock_proxy<mutex_guarded<std::string>>::const_pointer, const std::string*>::value);
+            std::is_same_v<lock_proxy<mutex_guarded<std::string>>::pointer, std::string*>);
+
+        STATIC_REQUIRE(std::is_same_v<
+                       lock_proxy<mutex_guarded<std::string>>::const_pointer, const std::string*>);
 
         STATIC_REQUIRE(
-            std::is_same<lock_proxy<mutex_guarded<std::string>>::reference, std::string&>::value);
+            std::is_same_v<lock_proxy<mutex_guarded<std::string>>::reference, std::string&>);
 
-        STATIC_REQUIRE(std::is_same<
-                       lock_proxy<mutex_guarded<std::string>>::const_reference,
-                       const std::string&>::value);
+        STATIC_REQUIRE(
+            std::is_same_v<
+                lock_proxy<mutex_guarded<std::string>>::const_reference, const std::string&>);
     }
 }
 
@@ -388,11 +433,13 @@ TEST_CASE("Const-Correctness")
     }
 }
 
-TEST_CASE("Unique Timed Mutex, Part I", "[Std]")
+TEST_CASE("Unique Timed Mutex without Contention")
 {
     const std::string sample = "Testing a std::timed_mutex.";
 
-    using mutex_type = detail::wrapped_unique_and_timed_mutex<std::timed_mutex>;
+    using start_locked = std::false_type;
+    using mutex_type = detail::wrapped_unique_and_timed_mutex<std::timed_mutex, start_locked>;
+
     mutex_guarded<std::string, mutex_type> data{ sample };
 
     SECTION("Basic non-timed locking")
@@ -430,7 +477,7 @@ TEST_CASE("Unique Timed Mutex, Part I", "[Std]")
 
         auto wasLambdaInvoked = false;
 
-        const boost::optional<std::size_t> length = data.try_with_lock_held_for(
+        const std::optional<std::size_t> length = data.try_with_lock_held_for(
             std::chrono::milliseconds{ 10 }, [&](const std::string& value) noexcept {
                 REQUIRE(detail::global::tracker.was_locked == true);
 
@@ -438,7 +485,7 @@ TEST_CASE("Unique Timed Mutex, Part I", "[Std]")
                 return value.length();
             });
 
-        REQUIRE(length.is_initialized());
+        REQUIRE(length.has_value());
         REQUIRE(wasLambdaInvoked == true);
         REQUIRE(detail::global::tracker.was_unlocked == true);
     }
@@ -468,13 +515,12 @@ TEST_CASE("Unique Timed Mutex, Part I", "[Std]")
     }
 }
 
-TEST_CASE("Unique Timed Mutex, Part II", "[Std]")
+TEST_CASE("Unique Timed Mutex with Contention")
 {
     const std::string sample = "Testing a std::timed_mutex.";
 
-    using ShouldStartLocked = std::true_type;
-
-    using mutex_type = detail::wrapped_unique_and_timed_mutex<std::timed_mutex, ShouldStartLocked>;
+    using start_locked = std::true_type;
+    using mutex_type = detail::wrapped_unique_and_timed_mutex<std::timed_mutex, start_locked>;
     mutex_guarded<std::string, mutex_type> data{ sample };
 
     SECTION("Basic timed locking")
@@ -497,7 +543,7 @@ TEST_CASE("Unique Timed Mutex, Part II", "[Std]")
 
         auto wasLambdaInvoked = false;
 
-        const boost::optional<std::size_t> length = data.try_with_lock_held_for(
+        const std::optional<std::size_t> length = data.try_with_lock_held_for(
             std::chrono::milliseconds{ 10 }, [&](const std::string& value) noexcept {
                 REQUIRE(detail::global::tracker.was_locked == false);
 
@@ -505,7 +551,7 @@ TEST_CASE("Unique Timed Mutex, Part II", "[Std]")
                 return value.length();
             });
 
-        REQUIRE(length.is_initialized() == false);
+        REQUIRE(length.has_value() == false);
         REQUIRE(wasLambdaInvoked == false);
         REQUIRE(detail::global::tracker.was_unlocked == false);
     }
@@ -528,5 +574,73 @@ TEST_CASE("Unique Timed Mutex, Part II", "[Std]")
         REQUIRE(wasLocked == false);
         REQUIRE(wasLambdaInvoked == false);
         REQUIRE(detail::global::tracker.was_unlocked == false);
+    }
+}
+
+TEST_CASE("Shared Timed Mutex without Contention")
+{
+    const std::string sample = "Testing a std::shared_timed_mutex.";
+
+    using start_locked = std::false_type;
+    using mutex_type =
+        detail::wrapped_shared_and_timed_mutex<std::shared_timed_mutex, start_locked>;
+
+    mutex_guarded<std::string, mutex_type> data{ sample };
+
+    STATIC_REQUIRE(std::is_same<
+                   detail::mutex_traits<mutex_type>::category_type,
+                   detail::mutex_category::unique_and_timed>::value);
+
+    SECTION("Basic timed locking")
+    {
+        REQUIRE(detail::global::tracker.was_locked == false);
+        REQUIRE(detail::global::tracker.was_unlocked == false);
+
+        constexpr auto timeout = std::chrono::milliseconds{ 10 };
+
+        REQUIRE(data.try_lock_for(timeout).is_locked() == true);
+
+        REQUIRE(detail::global::tracker.was_locked == true);
+        REQUIRE(detail::global::tracker.was_unlocked == true);
+    }
+
+    SECTION("Writing data using a lambda that returns something")
+    {
+        REQUIRE(detail::global::tracker.was_locked == false);
+        REQUIRE(detail::global::tracker.was_unlocked == false);
+
+        auto wasLambdaInvoked = false;
+
+        const std::optional<std::size_t> length = data.try_with_lock_held_for(
+            std::chrono::milliseconds{ 10 }, [&](const std::string& value) noexcept {
+                REQUIRE(detail::global::tracker.was_locked == true);
+
+                wasLambdaInvoked = true;
+                return value.length();
+            });
+
+        REQUIRE(length.has_value() == true);
+        REQUIRE(wasLambdaInvoked == true);
+        REQUIRE(detail::global::tracker.was_unlocked == true);
+    }
+
+    SECTION("Writing data using a lambda that returns nothing")
+    {
+        REQUIRE(detail::global::tracker.was_locked == false);
+        REQUIRE(detail::global::tracker.was_unlocked == false);
+
+        auto wasLambdaInvoked = false;
+
+        const std::string anotherString = "Something else";
+
+        const auto wasLocked = data.try_with_lock_held_for(
+            std::chrono::milliseconds{ 10 }, [&](std::string & value) noexcept {
+                wasLambdaInvoked = true;
+                value = anotherString;
+            });
+
+        REQUIRE(wasLocked == true);
+        REQUIRE(wasLambdaInvoked == true);
+        REQUIRE(detail::global::tracker.was_unlocked == true);
     }
 }

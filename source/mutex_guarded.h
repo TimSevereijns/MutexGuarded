@@ -1,25 +1,8 @@
 #pragma once
 
 #include <mutex>
+#include <optional>
 #include <type_traits>
-
-#include <boost/optional.hpp>
-
-namespace future_std
-{
-namespace std17
-{
-namespace detail
-{
-template <typename...> struct make_void
-{
-    using type = void;
-};
-} // namespace detail
-
-template <typename... T> using void_t = typename detail::make_void<T...>::type;
-} // namespace std17
-} // namespace future_std
 
 namespace detail
 {
@@ -32,7 +15,7 @@ template <typename, typename = void> struct is_mutex : std::false_type
 template <typename MutexType>
 struct is_mutex<
     MutexType,
-    future_std::std17::void_t<
+    std::void_t<
         decltype(std::declval<MutexType>().lock()), decltype(std::declval<MutexType>().unlock())>>
     : std::true_type
 {
@@ -44,7 +27,7 @@ template <typename, typename = void> struct is_shared_mutex : std::false_type
 
 template <typename MutexType>
 struct is_shared_mutex<
-    MutexType, future_std::std17::void_t<
+    MutexType, std::void_t<
                    decltype(std::declval<MutexType>().lock_shared()),
                    decltype(std::declval<MutexType>().try_lock_shared()),
                    decltype(std::declval<MutexType>().unlock_shared())>> : std::true_type
@@ -57,7 +40,7 @@ template <typename, typename = void> struct is_timed_mutex : std::false_type
 
 template <typename MutexType>
 struct is_timed_mutex<
-    MutexType, future_std::std17::void_t<decltype(std::declval<MutexType>().try_lock_for(
+    MutexType, std::void_t<decltype(std::declval<MutexType>().try_lock_for(
                    std::declval<std::chrono::seconds>()))>> : std::true_type
 {
 };
@@ -365,35 +348,35 @@ class lock_proxy
         }
     }
 
-    auto is_locked() const -> bool
+    [[nodiscard]] auto is_locked() const -> bool
     {
         return m_base != nullptr;
     }
 
-    auto operator-> () noexcept -> pointer
+    [[nodiscard]] auto operator-> () noexcept -> pointer
     {
         return &m_base->m_data;
     }
 
-    auto operator-> () const noexcept -> const_pointer
+    [[nodiscard]] auto operator-> () const noexcept -> const_pointer
     {
         return &m_base->m_data;
     }
 
-    auto operator*() noexcept -> reference
+    [[nodiscard]] auto operator*() noexcept -> reference
     {
         return m_base->m_data;
     }
 
-    auto operator*() const noexcept -> const_reference
+    [[nodiscard]] auto operator*() const noexcept -> const_reference
     {
         return m_base->m_data;
     }
 
   private:
-    typename std::conditional<
-        std::is_const<BaseType>::value, typename std::add_pointer<const BaseType>::type,
-        typename std::add_pointer<BaseType>::type>::type m_base = nullptr;
+    std::conditional_t<
+        std::is_const_v<BaseType>, std::add_pointer_t<const BaseType>, std::add_pointer_t<BaseType>>
+        m_base = nullptr;
 };
 
 namespace detail
@@ -419,7 +402,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique>
      *
      * @returns An RAII proxy.
      */
-    auto lock() -> unique_lock_proxy
+    [[nodiscard]] auto lock() -> unique_lock_proxy
     {
         return { static_cast<DerivedType*>(this) };
     }
@@ -429,7 +412,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique>
      *
      * @returns An RAII proxy.
      */
-    auto lock() const -> const_unique_lock_proxy
+    [[nodiscard]] auto lock() const -> const_unique_lock_proxy
     {
         return { static_cast<const DerivedType*>(this) };
     }
@@ -445,7 +428,8 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique>
      * @returns The result of invoking the functor, provided that the functor returns something.
      */
     template <typename CallableType>
-    auto with_lock_held(CallableType&& callable) -> decltype(callable(std::declval<DataType&>()))
+    [[nodiscard]] auto with_lock_held(CallableType&& callable)
+        -> decltype(callable(std::declval<DataType&>()))
     {
         const auto scopedGuard = lock();
         return callable(static_cast<DerivedType*>(this)->m_data);
@@ -463,7 +447,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique>
      * @returns The result of invoking the functor, provided that the functor returns something.
      */
     template <typename CallableType>
-    auto with_lock_held(CallableType&& callable) const
+    [[nodiscard]] auto with_lock_held(CallableType&& callable) const
         -> decltype(callable(std::declval<const DataType&>()))
     {
         const auto scopedGuard = lock();
@@ -493,7 +477,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_a
      *
      * @returns An RAII proxy.
      */
-    auto lock() -> unique_lock_proxy
+    [[nodiscard]] auto lock() -> unique_lock_proxy
     {
         return { static_cast<DerivedType*>(this) };
     }
@@ -503,7 +487,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_a
      *
      * @returns An RAII proxy.
      */
-    auto lock() const -> const_unique_lock_proxy
+    [[nodiscard]] auto lock() const -> const_unique_lock_proxy
     {
         return { static_cast<const DerivedType*>(this) };
     }
@@ -526,7 +510,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_a
      * @returns An RAII proxy.
      */
     template <typename ChronoType>
-    auto try_lock_for(const ChronoType& timeout) const -> const_timed_lock_proxy
+    [[nodiscard]] auto try_lock_for(const ChronoType& timeout) const -> const_timed_lock_proxy
     {
         return { static_cast<const DerivedType*>(this), timeout };
     }
@@ -544,9 +528,9 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_a
      * @returns True if a lock was aqcuired on the mutex; false otherwise.
      */
     template <typename ChronoType, typename CallableType>
-    auto try_with_lock_held_for(const ChronoType& timeout, CallableType&& callable) ->
-        typename std::enable_if<
-            std::is_same<decltype(callable(std::declval<DataType&>())), void>::value, bool>::type
+    [[nodiscard]] auto try_with_lock_held_for(const ChronoType& timeout, CallableType&& callable)
+        -> std::enable_if_t<
+            std::is_same_v<decltype(callable(std::declval<DataType&>())), void>, bool>
     {
         const auto proxy = try_lock_for(timeout);
         if (proxy.is_locked()) {
@@ -572,10 +556,10 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_a
      * instead.
      */
     template <typename ChronoType, typename CallableType>
-    auto try_with_lock_held_for(const ChronoType& timeout, CallableType&& callable) ->
-        typename std::enable_if<
-            !std::is_same<decltype(callable(std::declval<DataType&>())), void>::value,
-            boost::optional<decltype(callable(std::declval<DataType&>()))>>::type
+    [[nodiscard]] auto try_with_lock_held_for(const ChronoType& timeout, CallableType&& callable)
+        -> std::enable_if_t<
+            !std::is_same_v<decltype(callable(std::declval<DataType&>())), void>,
+            std::optional<decltype(callable(std::declval<DataType&>()))>>
     {
         const auto proxy = try_lock_for(timeout);
         if (proxy.is_locked()) {
@@ -604,7 +588,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared>
      *
      * @returns An RAII proxy.
      */
-    auto write_lock() -> unique_lock_proxy
+    [[nodiscard]] auto write_lock() -> unique_lock_proxy
     {
         return { static_cast<DerivedType*>(this) };
     }
@@ -615,7 +599,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared>
      *
      * @returns An RAII proxy.
      */
-    auto read_lock() const -> shared_lock_proxy
+    [[nodiscard]] auto read_lock() const -> shared_lock_proxy
     {
         return { static_cast<const DerivedType*>(this) };
     }
@@ -631,7 +615,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared>
      * @returns The result of invoking the functor, provided that the functor returns something.
      */
     template <typename CallableType>
-    auto with_write_lock_held(CallableType&& callable)
+    [[nodiscard]] auto with_write_lock_held(CallableType&& callable)
         -> decltype(callable(std::declval<DataType&>()))
     {
         const auto scopedGuard = write_lock();
@@ -650,7 +634,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared>
      * @returns The result of invoking the functor, provided that the functor returns something.
      */
     template <typename CallableType>
-    auto with_read_lock_held(CallableType&& callable) const
+    [[nodiscard]] auto with_read_lock_held(CallableType&& callable) const
         -> decltype(callable(std::declval<const DataType&>()))
     {
         const auto scopedGuard = read_lock();
@@ -681,7 +665,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
      *
      * @returns An RAII proxy.
      */
-    auto write_lock() -> unique_lock_proxy
+    [[nodiscard]] auto write_lock() -> unique_lock_proxy
     {
         return { static_cast<DerivedType*>(this) };
     }
@@ -692,7 +676,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
      *
      * @returns An RAII proxy.
      */
-    auto read_lock() const -> shared_lock_proxy
+    [[nodiscard]] auto read_lock() const -> shared_lock_proxy
     {
         return { static_cast<const DerivedType*>(this) };
     }
@@ -710,7 +694,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
      * @returns An RAII proxy.
      */
     template <typename ChronoType>
-    auto try_write_lock_for(const ChronoType& timeout) -> timed_unique_lock_proxy
+    [[nodiscard]] auto try_write_lock_for(const ChronoType& timeout) -> timed_unique_lock_proxy
     {
         return { static_cast<DerivedType*>(this), timeout };
     }
@@ -728,7 +712,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
      * @returns An RAII proxy.
      */
     template <typename ChronoType>
-    auto try_read_lock_for(const ChronoType& timeout) const -> timed_shared_lock_proxy
+    [[nodiscard]] auto try_read_lock_for(const ChronoType& timeout) const -> timed_shared_lock_proxy
     {
         return { static_cast<const DerivedType*>(this), timeout };
     }
@@ -746,9 +730,10 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
      * @returns True if a lock was aqcuired on the mutex; false otherwise.
      */
     template <typename ChronoType, typename CallableType>
-    auto try_with_write_lock_held_for(const ChronoType& timeout, CallableType&& callable) ->
-        typename std::enable_if<
-            std::is_same<decltype(callable(std::declval<DataType&>())), void>::value, bool>::type
+    [[nodiscard]] auto
+    try_with_write_lock_held_for(const ChronoType& timeout, CallableType&& callable)
+        -> std::enable_if_t<
+            std::is_same_v<decltype(callable(std::declval<DataType&>())), void>, bool>
     {
         const auto proxy = try_write_lock_for(timeout);
         if (proxy.is_locked()) {
@@ -774,10 +759,11 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
      * instead.
      */
     template <typename ChronoType, typename CallableType>
-    auto try_with_write_lock_held_for(const ChronoType& timeout, CallableType&& callable) ->
-        typename std::enable_if<
-            !std::is_same<decltype(callable(std::declval<DataType&>())), void>::value,
-            boost::optional<decltype(callable(std::declval<DataType&>()))>>::type
+    [[nodiscard]] auto
+    try_with_write_lock_held_for(const ChronoType& timeout, CallableType&& callable)
+        -> std::enable_if_t<
+            !std::is_same_v<decltype(callable(std::declval<DataType&>())), void>,
+            std::optional<decltype(callable(std::declval<DataType&>()))>>
     {
         const auto proxy = try_write_lock_for(timeout);
         if (proxy.is_locked()) {
@@ -800,10 +786,10 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
      * @returns True if a lock was aqcuired on the mutex; false otherwise.
      */
     template <typename ChronoType, typename CallableType>
-    auto try_with_read_lock_held_for(const ChronoType& timeout, CallableType&& callable) const ->
-        typename std::enable_if<
-            std::is_same<decltype(callable(std::declval<const DataType&>())), void>::value,
-            bool>::type
+    [[nodiscard]] auto
+    try_with_read_lock_held_for(const ChronoType& timeout, CallableType&& callable) const
+        -> std::enable_if_t<
+            std::is_same_v<decltype(callable(std::declval<const DataType&>())), void>, bool>
     {
         const auto proxy = try_write_lock_for(timeout);
         if (proxy.is_locked()) {
@@ -829,10 +815,11 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
      * instead.
      */
     template <typename ChronoType, typename CallableType>
-    auto try_with_read_lock_held_for(const ChronoType& timeout, CallableType&& callable) const ->
-        typename std::enable_if<
-            !std::is_same<decltype(callable(std::declval<const DataType&>())), void>::value,
-            boost::optional<decltype(callable(std::declval<const DataType&>()))>>::type
+    [[nodiscard]] auto
+    try_with_read_lock_held_for(const ChronoType& timeout, CallableType&& callable) const
+        -> std::enable_if_t<
+            !std::is_same_v<decltype(callable(std::declval<const DataType&>())), void>,
+            std::optional<decltype(callable(std::declval<const DataType&>()))>>
     {
         const auto proxy = try_read_lock_for(timeout);
         if (proxy.is_locked()) {
@@ -895,7 +882,7 @@ class mutex_guarded : public detail::mutex_guarded_base<DataType, MutexType>
     {
         const std::lock_guard<MutexType> guard{ other.m_mutex };
         m_data = other.m_data;
-    };
+    }
 
     mutex_guarded(mutex_guarded<DataType, MutexType>&& other) : m_data{ std::move(other.m_data) }
     {
