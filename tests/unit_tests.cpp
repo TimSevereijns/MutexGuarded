@@ -41,7 +41,9 @@ template <typename MutexType> class wrapped_unique_mutex
 
     bool try_lock()
     {
-        return m_mutex.try_lock();
+        const auto successfully_locked = m_mutex.try_lock();
+        global::tracker.was_locked = successfully_locked;
+        return successfully_locked;
     }
 
     void unlock()
@@ -54,12 +56,31 @@ template <typename MutexType> class wrapped_unique_mutex
     mutable MutexType m_mutex;
 };
 
-template <typename MutexType> class wrapped_shared_mutex : public wrapped_unique_mutex<MutexType>
+template <typename MutexType> class wrapped_shared_mutex
 {
   public:
     wrapped_shared_mutex()
     {
         global::reset_tracker();
+    }
+
+    void lock()
+    {
+        m_mutex.lock();
+        global::tracker.was_locked = true;
+    }
+
+    bool try_lock()
+    {
+        const auto successfully_locked = m_mutex.try_lock();
+        global::tracker.was_locked = successfully_locked;
+        return successfully_locked;
+    }
+
+    void unlock()
+    {
+        m_mutex.unlock();
+        global::tracker.was_unlocked = true;
     }
 
     void lock_shared()
@@ -104,10 +125,9 @@ class wrapped_unique_and_timed_mutex
         global::tracker.was_locked = true;
     }
 
-    template <class Rep, class Period>
-    bool try_lock_for(const std::chrono::duration<Rep, Period>& timeout)
+    bool try_lock()
     {
-        const auto successfully_locked = m_mutex.try_lock_for(timeout);
+        const auto successfully_locked = m_mutex.try_lock();
         global::tracker.was_locked = successfully_locked;
         return successfully_locked;
     }
@@ -118,12 +138,20 @@ class wrapped_unique_and_timed_mutex
         global::tracker.was_unlocked = true;
     }
 
+    template <class Rep, class Period>
+    bool try_lock_for(const std::chrono::duration<Rep, Period>& timeout)
+    {
+        const auto successfully_locked = m_mutex.try_lock_for(timeout);
+        global::tracker.was_locked = successfully_locked;
+        return successfully_locked;
+    }
+
   private:
     mutable MutexType m_mutex;
 };
 
 template <typename MutexType, typename ShouldStartLocked = std::false_type>
-class wrapped_shared_and_timed_mutex : public wrapped_unique_and_timed_mutex<MutexType>
+class wrapped_shared_and_timed_mutex
 {
   public:
     wrapped_shared_and_timed_mutex()
@@ -135,10 +163,44 @@ class wrapped_shared_and_timed_mutex : public wrapped_unique_and_timed_mutex<Mut
         global::reset_tracker();
     }
 
+    void lock()
+    {
+        m_mutex.lock();
+        global::tracker.was_locked = true;
+    }
+
+    bool try_lock()
+    {
+        const auto successfully_locked = m_mutex.try_lock();
+        global::tracker.was_locked = successfully_locked;
+        return successfully_locked;
+    }
+
+    void unlock()
+    {
+        m_mutex.unlock();
+        global::tracker.was_unlocked = true;
+    }
+
+    bool try_lock_shared()
+    {
+        const auto successfully_locked = m_mutex.try_lock_shared();
+        global::tracker.was_locked = successfully_locked;
+        return successfully_locked;
+    }
+
     void lock_shared()
     {
         m_mutex.lock_shared();
         global::tracker.was_locked = true;
+    }
+
+    template <class Rep, class Period>
+    bool try_lock_for(const std::chrono::duration<Rep, Period>& timeout)
+    {
+        const auto successfully_locked = m_mutex.try_lock_for(timeout);
+        global::tracker.was_locked = successfully_locked;
+        return successfully_locked;
     }
 
     template <class Rep, class Period>
@@ -167,6 +229,7 @@ TEST_CASE("Trait Detection")
         STATIC_REQUIRE(detail::traits::is_mutex<std::mutex>::value == true);
         STATIC_REQUIRE(detail::traits::is_shared_mutex<std::mutex>::value == false);
         STATIC_REQUIRE(detail::traits::is_timed_mutex<std::mutex>::value == false);
+        STATIC_REQUIRE(detail::traits::is_timed_shared_mutex<std::mutex>::value == false);
     }
 
     SECTION("Locking capabilities of std::shared_timed_mutex", "[Std]")
@@ -174,6 +237,8 @@ TEST_CASE("Trait Detection")
         STATIC_REQUIRE(detail::traits::is_mutex<std::shared_timed_mutex>::value == true);
         STATIC_REQUIRE(detail::traits::is_shared_mutex<std::shared_timed_mutex>::value == true);
         STATIC_REQUIRE(detail::traits::is_timed_mutex<std::shared_timed_mutex>::value == true);
+        STATIC_REQUIRE(
+            detail::traits::is_timed_shared_mutex<std::shared_timed_mutex>::value == true);
     }
 
     SECTION("Locking capabilities of boost::recursive_mutex", "[Boost]")
@@ -181,6 +246,8 @@ TEST_CASE("Trait Detection")
         STATIC_REQUIRE(detail::traits::is_mutex<boost::recursive_mutex>::value == true);
         STATIC_REQUIRE(detail::traits::is_shared_mutex<boost::recursive_mutex>::value == false);
         STATIC_REQUIRE(detail::traits::is_timed_mutex<boost::recursive_mutex>::value == false);
+        STATIC_REQUIRE(
+            detail::traits::is_timed_shared_mutex<boost::recursive_mutex>::value == false);
     }
 
     SECTION("Locking capabilities of boost::shared_mutex", "[Boost]")
@@ -188,6 +255,7 @@ TEST_CASE("Trait Detection")
         STATIC_REQUIRE(detail::traits::is_mutex<boost::shared_mutex>::value == true);
         STATIC_REQUIRE(detail::traits::is_shared_mutex<boost::shared_mutex>::value == true);
         STATIC_REQUIRE(detail::traits::is_timed_mutex<boost::shared_mutex>::value == false);
+        STATIC_REQUIRE(detail::traits::is_timed_shared_mutex<boost::shared_mutex>::value == false);
     }
 }
 
@@ -589,7 +657,7 @@ TEST_CASE("Shared Timed Mutex without Contention")
 
     STATIC_REQUIRE(std::is_same<
                    detail::mutex_traits<mutex_type>::category_type,
-                   detail::mutex_category::unique_and_timed>::value);
+                   detail::mutex_category::shared_and_timed>::value);
 
     SECTION("Basic timed locking")
     {
@@ -598,7 +666,7 @@ TEST_CASE("Shared Timed Mutex without Contention")
 
         constexpr auto timeout = std::chrono::milliseconds{ 10 };
 
-        REQUIRE(data.try_lock_for(timeout).is_locked() == true);
+        REQUIRE(data.try_read_lock_for(timeout).is_locked() == true);
 
         REQUIRE(detail::global::tracker.was_locked == true);
         REQUIRE(detail::global::tracker.was_unlocked == true);
@@ -611,7 +679,7 @@ TEST_CASE("Shared Timed Mutex without Contention")
 
         auto wasLambdaInvoked = false;
 
-        const std::optional<std::size_t> length = data.try_with_lock_held_for(
+        const std::optional<std::size_t> length = data.try_with_read_lock_held_for(
             std::chrono::milliseconds{ 10 }, [&](const std::string& value) noexcept {
                 REQUIRE(detail::global::tracker.was_locked == true);
 
@@ -633,7 +701,7 @@ TEST_CASE("Shared Timed Mutex without Contention")
 
         const std::string anotherString = "Something else";
 
-        const auto wasLocked = data.try_with_lock_held_for(
+        const auto wasLocked = data.try_with_write_lock_held_for(
             std::chrono::milliseconds{ 10 }, [&](std::string & value) noexcept {
                 wasLambdaInvoked = true;
                 value = anotherString;

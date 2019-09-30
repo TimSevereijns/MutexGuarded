@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <mutex>
 #include <optional>
 #include <type_traits>
@@ -31,6 +32,17 @@ struct is_shared_mutex<
                    decltype(std::declval<MutexType>().lock_shared()),
                    decltype(std::declval<MutexType>().try_lock_shared()),
                    decltype(std::declval<MutexType>().unlock_shared())>> : std::true_type
+{
+};
+
+template <typename, typename = void> struct is_timed_shared_mutex : std::false_type
+{
+};
+
+template <typename MutexType>
+struct is_timed_shared_mutex<
+    MutexType, std::void_t<decltype(std::declval<MutexType>().try_lock_shared_for(
+                   std::declval<std::chrono::duration<int>>()))>> : std::true_type
 {
 };
 
@@ -71,7 +83,7 @@ template <typename MutexType> struct mutex_traits_impl<MutexType, detail::mutex_
         mutex.lock();
     }
 
-    static bool try_lock(MutexType& mutex)
+    [[nodiscard]] static bool try_lock(MutexType& mutex)
     {
         return mutex.try_lock();
     }
@@ -94,7 +106,7 @@ struct mutex_traits_impl<MutexType, detail::mutex_category::shared>
         mutex.lock_shared();
     }
 
-    static bool try_lock_shared(MutexType& mutex)
+    [[nodiscard]] static bool try_lock_shared(MutexType& mutex)
     {
         return mutex.try_lock_shared();
     }
@@ -113,13 +125,13 @@ struct mutex_traits_impl<MutexType, detail::mutex_category::unique_and_timed>
     : detail::mutex_traits_impl<MutexType, detail::mutex_category::unique>
 {
     template <typename ChronoType>
-    static bool try_lock_for(MutexType& mutex, const ChronoType& timeout)
+    [[nodiscard]] static bool try_lock_for(MutexType& mutex, const ChronoType& timeout)
     {
         return mutex.try_lock_for(timeout);
     }
 
     template <typename DurationType>
-    static bool try_lock_until(MutexType& mutex, const DurationType& duration)
+    [[nodiscard]] static bool try_lock_until(MutexType& mutex, const DurationType& duration)
     {
         return mutex.try_lock_until(duration);
     }
@@ -134,38 +146,39 @@ struct mutex_traits_impl<MutexType, detail::mutex_category::shared_and_timed>
       detail::mutex_traits_impl<MutexType, detail::mutex_category::shared>
 {
     template <typename ChronoType>
-    static void try_lock_shared_for(MutexType& mutex, const ChronoType& timeout)
+    [[nodiscard]] static bool try_lock_shared_for(MutexType& mutex, const ChronoType& timeout)
     {
-        mutex.try_lock_shared_for(timeout);
+        return mutex.try_lock_shared_for(timeout);
     }
 
     template <typename DurationType>
-    static bool try_lock_shared_until(MutexType& mutex, const DurationType& duration)
+    [[nodiscard]] static bool try_lock_shared_until(MutexType& mutex, const DurationType& duration)
     {
         return mutex.try_lock_shared_until(duration);
     }
 };
 
-template <bool IsMutex, bool IsSharedMutex, bool IsTimedMutex> struct mutex_tagger
+template <bool IsMutex, bool IsSharedMutex, bool IsTimedMutex, bool IsSharedTimedMutex>
+struct mutex_tagger
 {
 };
 
-template <> struct mutex_tagger<true, false, false>
+template <> struct mutex_tagger<true, false, false, false>
 {
     using type = detail::mutex_category::unique;
 };
 
-template <> struct mutex_tagger<true, true, false>
+template <> struct mutex_tagger<true, true, false, false>
 {
     using type = detail::mutex_category::shared;
 };
 
-template <> struct mutex_tagger<true, false, true>
+template <> struct mutex_tagger<true, false, true, false>
 {
     using type = detail::mutex_category::unique_and_timed;
 };
 
-template <> struct mutex_tagger<true, true, true>
+template <> struct mutex_tagger<true, true, true, true>
 {
     using type = detail::mutex_category::shared_and_timed;
 };
@@ -174,16 +187,19 @@ template <> struct mutex_tagger<true, true, true>
  * @brief Mutex traits, as derived from the detected functionality of the mutex.
  */
 template <typename MutexType>
-struct mutex_traits : mutex_traits_impl<
-                          MutexType, typename mutex_tagger<
-                                         detail::traits::is_mutex<MutexType>::value,
-                                         detail::traits::is_shared_mutex<MutexType>::value,
-                                         detail::traits::is_timed_mutex<MutexType>::value>::type>
+struct mutex_traits
+    : mutex_traits_impl<
+          MutexType, typename mutex_tagger<
+                         detail::traits::is_mutex<MutexType>::value,
+                         detail::traits::is_shared_mutex<MutexType>::value,
+                         detail::traits::is_timed_mutex<MutexType>::value,
+                         detail::traits::is_timed_shared_mutex<MutexType>::value>::type>
 {
     using category_type = typename mutex_tagger<
         detail::traits::is_mutex<MutexType>::value,
         detail::traits::is_shared_mutex<MutexType>::value,
-        detail::traits::is_timed_mutex<MutexType>::value>::type;
+        detail::traits::is_timed_mutex<MutexType>::value,
+        detail::traits::is_timed_shared_mutex<MutexType>::value>::type;
 
     using mutex_type = MutexType;
 };
