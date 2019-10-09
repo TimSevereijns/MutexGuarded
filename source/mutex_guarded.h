@@ -183,23 +183,19 @@ template <> struct mutex_tagger<true, true, true, true>
     using type = detail::mutex_category::shared_and_timed;
 };
 
+template <typename MutexType>
+using detect_mutex_category = typename mutex_tagger<
+    detail::traits::is_mutex<MutexType>::value, detail::traits::is_shared_mutex<MutexType>::value,
+    detail::traits::is_timed_mutex<MutexType>::value,
+    detail::traits::is_timed_shared_mutex<MutexType>::value>::type;
+
 /**
  * @brief Mutex traits, as derived from the detected functionality of the mutex.
  */
 template <typename MutexType>
-struct mutex_traits
-    : mutex_traits_impl<
-          MutexType, typename mutex_tagger<
-                         detail::traits::is_mutex<MutexType>::value,
-                         detail::traits::is_shared_mutex<MutexType>::value,
-                         detail::traits::is_timed_mutex<MutexType>::value,
-                         detail::traits::is_timed_shared_mutex<MutexType>::value>::type>
+struct mutex_traits : mutex_traits_impl<MutexType, detect_mutex_category<MutexType>>
 {
-    using category_type = typename mutex_tagger<
-        detail::traits::is_mutex<MutexType>::value,
-        detail::traits::is_shared_mutex<MutexType>::value,
-        detail::traits::is_timed_mutex<MutexType>::value,
-        detail::traits::is_timed_shared_mutex<MutexType>::value>::type;
+    using category_type = detect_mutex_category<MutexType>;
 
     using mutex_type = MutexType;
 };
