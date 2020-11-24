@@ -10,7 +10,7 @@
 
 namespace detail
 {
-namespace global
+namespace tracker
 {
 struct lock_tracker
 {
@@ -23,33 +23,33 @@ void reset_tracker() noexcept
     tracker.was_locked = false;
     tracker.was_unlocked = false;
 }
-} // namespace global
+} // namespace tracker
 
 template <typename MutexType> class wrapped_unique_mutex
 {
   public:
     wrapped_unique_mutex()
     {
-        global::reset_tracker();
+        tracker::reset_tracker();
     }
 
     void lock()
     {
         m_mutex.lock();
-        global::tracker.was_locked = true;
+        tracker::tracker.was_locked = true;
     }
 
     bool try_lock()
     {
         const auto successfully_locked = m_mutex.try_lock();
-        global::tracker.was_locked = successfully_locked;
+        tracker::tracker.was_locked = successfully_locked;
         return successfully_locked;
     }
 
     void unlock()
     {
         m_mutex.unlock();
-        global::tracker.was_unlocked = true;
+        tracker::tracker.was_unlocked = true;
     }
 
   private:
@@ -61,45 +61,45 @@ template <typename MutexType> class wrapped_shared_mutex
   public:
     wrapped_shared_mutex()
     {
-        global::reset_tracker();
+        tracker::reset_tracker();
     }
 
     void lock()
     {
         m_mutex.lock();
-        global::tracker.was_locked = true;
+        tracker::tracker.was_locked = true;
     }
 
     bool try_lock()
     {
         const auto successfully_locked = m_mutex.try_lock();
-        global::tracker.was_locked = successfully_locked;
+        tracker::tracker.was_locked = successfully_locked;
         return successfully_locked;
     }
 
     void unlock()
     {
         m_mutex.unlock();
-        global::tracker.was_unlocked = true;
+        tracker::tracker.was_unlocked = true;
     }
 
     void lock_shared()
     {
         m_mutex.lock_shared();
-        global::tracker.was_locked = true;
+        tracker::tracker.was_locked = true;
     }
 
     bool try_lock_shared()
     {
         const auto successfully_locked = m_mutex.try_lock_shared();
-        global::tracker.was_locked = successfully_locked;
+        tracker::tracker.was_locked = successfully_locked;
         return successfully_locked;
     }
 
     void unlock_shared()
     {
         m_mutex.unlock_shared();
-        global::tracker.was_unlocked = true;
+        tracker::tracker.was_unlocked = true;
     }
 
   private:
@@ -116,33 +116,33 @@ class wrapped_unique_and_timed_mutex
             m_mutex.lock();
         }
 
-        global::reset_tracker();
+        tracker::reset_tracker();
     }
 
     void lock()
     {
         m_mutex.lock();
-        global::tracker.was_locked = true;
+        tracker::tracker.was_locked = true;
     }
 
     bool try_lock()
     {
         const auto successfully_locked = m_mutex.try_lock();
-        global::tracker.was_locked = successfully_locked;
+        tracker::tracker.was_locked = successfully_locked;
         return successfully_locked;
     }
 
     void unlock()
     {
         m_mutex.unlock();
-        global::tracker.was_unlocked = true;
+        tracker::tracker.was_unlocked = true;
     }
 
     template <class Rep, class Period>
     bool try_lock_for(const std::chrono::duration<Rep, Period>& timeout)
     {
         const auto successfully_locked = m_mutex.try_lock_for(timeout);
-        global::tracker.was_locked = successfully_locked;
+        tracker::tracker.was_locked = successfully_locked;
         return successfully_locked;
     }
 
@@ -160,46 +160,46 @@ class wrapped_shared_and_timed_mutex
             m_mutex.lock();
         }
 
-        global::reset_tracker();
+        tracker::reset_tracker();
     }
 
     void lock()
     {
         m_mutex.lock();
-        global::tracker.was_locked = true;
+        tracker::tracker.was_locked = true;
     }
 
     bool try_lock()
     {
         const auto successfully_locked = m_mutex.try_lock();
-        global::tracker.was_locked = successfully_locked;
+        tracker::tracker.was_locked = successfully_locked;
         return successfully_locked;
     }
 
     void unlock()
     {
         m_mutex.unlock();
-        global::tracker.was_unlocked = true;
+        tracker::tracker.was_unlocked = true;
     }
 
     bool try_lock_shared()
     {
         const auto successfully_locked = m_mutex.try_lock_shared();
-        global::tracker.was_locked = successfully_locked;
+        tracker::tracker.was_locked = successfully_locked;
         return successfully_locked;
     }
 
     void lock_shared()
     {
         m_mutex.lock_shared();
-        global::tracker.was_locked = true;
+        tracker::tracker.was_locked = true;
     }
 
     template <class Rep, class Period>
     bool try_lock_for(const std::chrono::duration<Rep, Period>& timeout)
     {
         const auto successfully_locked = m_mutex.try_lock_for(timeout);
-        global::tracker.was_locked = successfully_locked;
+        tracker::tracker.was_locked = successfully_locked;
         return successfully_locked;
     }
 
@@ -207,14 +207,14 @@ class wrapped_shared_and_timed_mutex
     bool try_lock_shared_for(const std::chrono::duration<Rep, Period>& timeout)
     {
         const auto successfully_locked = m_mutex.try_lock_shared_for(timeout);
-        global::tracker.was_locked = successfully_locked;
+        tracker::tracker.was_locked = successfully_locked;
         return successfully_locked;
     }
 
     void unlock_shared()
     {
         m_mutex.unlock_shared();
-        global::tracker.was_unlocked = true;
+        tracker::tracker.was_unlocked = true;
     }
 
   private:
@@ -299,30 +299,30 @@ TEST_CASE("Guarded with a std::mutex", "[Std]")
 
     SECTION("Locking")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         REQUIRE(data.lock().is_locked());
         REQUIRE(*data.lock() == sample);
         REQUIRE(data.lock()->length() == sample.length());
 
-        REQUIRE(detail::global::tracker.was_locked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_locked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 
     SECTION("Data access using a lambda")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         const std::size_t length = data.with_lock_held([](const std::string& value) noexcept {
-            REQUIRE(detail::global::tracker.was_locked == true);
+            REQUIRE(detail::tracker::tracker.was_locked == true);
 
             return value.length();
         });
 
         REQUIRE(length == sample.length());
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 }
 
@@ -336,30 +336,30 @@ TEST_CASE("Guarded with a boost::recursive_mutex", "[Boost]")
 
     SECTION("Locking")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         REQUIRE(data.lock().is_locked());
         REQUIRE(*data.lock() == sample);
         REQUIRE(data.lock()->length() == sample.length());
 
-        REQUIRE(detail::global::tracker.was_locked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_locked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 
     SECTION("Data access using a lambda")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         const std::size_t length = data.with_lock_held([](const std::string& value) noexcept {
-            REQUIRE(detail::global::tracker.was_locked == true);
+            REQUIRE(detail::tracker::tracker.was_locked == true);
 
             return value.length();
         });
 
         REQUIRE(length == sample.length());
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 }
 
@@ -372,53 +372,53 @@ TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
 
     SECTION("Read Locking")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         REQUIRE(data.read_lock().is_locked());
         REQUIRE(*data.read_lock() == sample);
         REQUIRE(data.read_lock()->length() == sample.length());
 
-        REQUIRE(detail::global::tracker.was_locked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_locked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 
     SECTION("Write Locking")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         REQUIRE(data.write_lock().is_locked());
         REQUIRE(data.write_lock()->length() == sample.length());
 
-        REQUIRE(detail::global::tracker.was_locked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_locked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 
     SECTION("Reading data using a lambda")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         const std::size_t length = data.with_read_lock_held([](const std::string& value) noexcept {
-            REQUIRE(detail::global::tracker.was_locked == true);
+            REQUIRE(detail::tracker::tracker.was_locked == true);
 
             return value.length();
         });
 
         REQUIRE(length == sample.length());
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 
     SECTION("Writing data using a lambda")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         const std::string anotherString = "Something else";
 
         const std::size_t length = data.with_write_lock_held([&](std::string & value) noexcept {
-            REQUIRE(detail::global::tracker.was_locked == true);
+            REQUIRE(detail::tracker::tracker.was_locked == true);
 
             value = anotherString;
             return value.length();
@@ -427,7 +427,7 @@ TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
         REQUIRE(length == anotherString.length());
         REQUIRE(*data.read_lock() == anotherString);
 
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 }
 
@@ -443,15 +443,15 @@ TEST_CASE("Moves and Copies", "[Std]")
         auto copy = data;
 
         // Making a copy should require lock acquisition:
-        REQUIRE(detail::global::tracker.was_locked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_locked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
 
-        detail::global::reset_tracker();
+        detail::tracker::reset_tracker();
 
         REQUIRE(copy.lock()->length() == sample.length());
 
-        REQUIRE(detail::global::tracker.was_locked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_locked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 
     SECTION("Move-assignment")
@@ -460,14 +460,14 @@ TEST_CASE("Moves and Copies", "[Std]")
 
         // For moves, we assume we're dealing with true r-values, meaning that
         // lock acquisition shouldn't be necessary:
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         REQUIRE(copy.lock()->length() == sample.length());
 
         // Accessing the data should, of course, require lock acquisition:
-        REQUIRE(detail::global::tracker.was_locked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_locked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 }
 
@@ -512,21 +512,21 @@ TEST_CASE("Unique Timed Mutex without Contention")
 
     SECTION("Basic non-timed locking")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         REQUIRE(data.lock().is_locked());
         REQUIRE(*data.lock() == sample);
         REQUIRE(data.lock()->length() == sample.length());
 
-        REQUIRE(detail::global::tracker.was_locked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_locked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 
     SECTION("Basic timed locking")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         constexpr auto timeout = std::chrono::milliseconds{ 10 };
 
@@ -534,20 +534,20 @@ TEST_CASE("Unique Timed Mutex without Contention")
         REQUIRE(*data.try_lock_for(timeout) == sample);
         REQUIRE(data.try_lock_for(timeout)->length() == sample.length());
 
-        REQUIRE(detail::global::tracker.was_locked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_locked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 
     SECTION("Writing data using a lambda that returns something")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         auto wasLambdaInvoked = false;
 
         const std::optional<std::size_t> length = data.try_with_lock_held_for(
             std::chrono::milliseconds{ 10 }, [&](const std::string& value) noexcept {
-                REQUIRE(detail::global::tracker.was_locked == true);
+                REQUIRE(detail::tracker::tracker.was_locked == true);
 
                 wasLambdaInvoked = true;
                 return value.length();
@@ -555,13 +555,13 @@ TEST_CASE("Unique Timed Mutex without Contention")
 
         REQUIRE(length.has_value());
         REQUIRE(wasLambdaInvoked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 
     SECTION("Writing data using a lambda that returns nothing")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         auto wasLambdaInvoked = false;
 
@@ -569,7 +569,7 @@ TEST_CASE("Unique Timed Mutex without Contention")
 
         const auto wasLocked = data.try_with_lock_held_for(
             std::chrono::milliseconds{ 10 }, [&](std::string & value) noexcept {
-                REQUIRE(detail::global::tracker.was_locked == true);
+                REQUIRE(detail::tracker::tracker.was_locked == true);
 
                 wasLambdaInvoked = true;
                 value = anotherString;
@@ -577,7 +577,7 @@ TEST_CASE("Unique Timed Mutex without Contention")
 
         REQUIRE(wasLocked);
         REQUIRE(wasLambdaInvoked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
 
         REQUIRE(*data.lock() == anotherString);
     }
@@ -593,27 +593,27 @@ TEST_CASE("Unique Timed Mutex with Contention")
 
     SECTION("Basic timed locking")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         constexpr auto timeout = std::chrono::milliseconds{ 10 };
 
         REQUIRE(data.try_lock_for(timeout).is_locked() == false);
 
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
     }
 
     SECTION("Writing data using a lambda that returns something")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         auto wasLambdaInvoked = false;
 
         const std::optional<std::size_t> length = data.try_with_lock_held_for(
             std::chrono::milliseconds{ 10 }, [&](const std::string& value) noexcept {
-                REQUIRE(detail::global::tracker.was_locked == false);
+                REQUIRE(detail::tracker::tracker.was_locked == false);
 
                 wasLambdaInvoked = true;
                 return value.length();
@@ -621,13 +621,13 @@ TEST_CASE("Unique Timed Mutex with Contention")
 
         REQUIRE(length.has_value() == false);
         REQUIRE(wasLambdaInvoked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
     }
 
     SECTION("Writing data using a lambda that returns nothing")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         auto wasLambdaInvoked = false;
 
@@ -641,7 +641,7 @@ TEST_CASE("Unique Timed Mutex with Contention")
 
         REQUIRE(wasLocked == false);
         REQUIRE(wasLambdaInvoked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
     }
 }
 
@@ -661,27 +661,27 @@ TEST_CASE("Shared Timed Mutex without Contention")
 
     SECTION("Basic timed locking")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         constexpr auto timeout = std::chrono::milliseconds{ 10 };
 
         REQUIRE(data.try_read_lock_for(timeout).is_locked() == true);
 
-        REQUIRE(detail::global::tracker.was_locked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_locked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 
     SECTION("Writing data using a lambda that returns something")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         auto wasLambdaInvoked = false;
 
         const std::optional<std::size_t> length = data.try_with_read_lock_held_for(
             std::chrono::milliseconds{ 10 }, [&](const std::string& value) noexcept {
-                REQUIRE(detail::global::tracker.was_locked == true);
+                REQUIRE(detail::tracker::tracker.was_locked == true);
 
                 wasLambdaInvoked = true;
                 return value.length();
@@ -689,13 +689,13 @@ TEST_CASE("Shared Timed Mutex without Contention")
 
         REQUIRE(length.has_value() == true);
         REQUIRE(wasLambdaInvoked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 
     SECTION("Writing data using a lambda that returns nothing")
     {
-        REQUIRE(detail::global::tracker.was_locked == false);
-        REQUIRE(detail::global::tracker.was_unlocked == false);
+        REQUIRE(detail::tracker::tracker.was_locked == false);
+        REQUIRE(detail::tracker::tracker.was_unlocked == false);
 
         auto wasLambdaInvoked = false;
 
@@ -709,6 +709,6 @@ TEST_CASE("Shared Timed Mutex without Contention")
 
         REQUIRE(wasLocked == true);
         REQUIRE(wasLambdaInvoked == true);
-        REQUIRE(detail::global::tracker.was_unlocked == true);
+        REQUIRE(detail::tracker::tracker.was_unlocked == true);
     }
 }

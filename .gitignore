@@ -37,6 +37,17 @@ debug/*
 release/*
 
 .vscode/*
-conan/*
 
+# Conan Output
+conan/*
 CMakeLists.txt.user
+conan.lock
+conanbuildinfo.cmake
+conanbuildinfo.txt
+conanfile.txt
+conaninfo.txt
+graph_info.json
+
+# Visual Studio Output
+out/*
+.vs/*
