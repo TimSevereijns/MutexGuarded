@@ -60,7 +60,7 @@ jobs:
       - name: Run Tests
         run: |
           cd ${GITHUB_WORKSPACE}/build
-          ./mutex-guarded
+          bin/mutex-guarded
           
       - name: Collect Coverage
         run: |
