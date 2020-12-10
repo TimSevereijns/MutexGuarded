@@ -46,7 +46,7 @@ jobs:
       - name: Install & Sync Conan Dependencies
         run: |
           cd ${GITHUB_WORKSPACE}
-          pip install conan --user
+          pip install conan
           mkdir conan && cd conan
           conan install ..
 
