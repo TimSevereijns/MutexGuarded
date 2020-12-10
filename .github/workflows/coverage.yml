@@ -19,6 +19,12 @@ jobs:
         run: |
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update -qq
+ 
+      - name: Install Python 3
+        uses: actions/setup-python@v1
+        with:
+          python-version: '3.x'
+          architecture: 'x64'
 
       - name: Install GCC 9
         run: |
