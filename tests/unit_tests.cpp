@@ -307,7 +307,19 @@ TEST_CASE("Guarded with a std::mutex", "[Std]")
         REQUIRE(detail::tracker.was_unlocked == true);
     }
 
-    SECTION("Data access using a lambda")
+    SECTION("Data access using a lambda, returning nothing")
+    {
+        REQUIRE(detail::tracker.was_locked == false);
+        REQUIRE(detail::tracker.was_unlocked == false);
+
+        data.with_lock_held([](const std::string& /*value*/) noexcept {
+            REQUIRE(detail::tracker.was_locked == true);
+        });
+
+        REQUIRE(detail::tracker.was_unlocked == true);
+    }
+
+    SECTION("Data access using a lambda, returning something")
     {
         REQUIRE(detail::tracker.was_locked == false);
         REQUIRE(detail::tracker.was_unlocked == false);
@@ -392,7 +404,19 @@ TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
         REQUIRE(detail::tracker.was_unlocked == true);
     }
 
-    SECTION("Reading data using a lambda")
+    SECTION("Reading data using a lambda, returning nothing")
+    {
+        REQUIRE(detail::tracker.was_locked == false);
+        REQUIRE(detail::tracker.was_unlocked == false);
+
+        data.with_read_lock_held([](const std::string& /*value*/) noexcept {
+            REQUIRE(detail::tracker.was_locked == true);
+        });
+
+        REQUIRE(detail::tracker.was_unlocked == true);
+    }
+
+    SECTION("Reading data using a lambda, returning something")
     {
         REQUIRE(detail::tracker.was_locked == false);
         REQUIRE(detail::tracker.was_unlocked == false);
@@ -407,14 +431,31 @@ TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
         REQUIRE(detail::tracker.was_unlocked == true);
     }
 
-    SECTION("Writing data using a lambda")
+    SECTION("Writing data using a lambda, returning nothing")
     {
         REQUIRE(detail::tracker.was_locked == false);
         REQUIRE(detail::tracker.was_unlocked == false);
 
         const std::string anotherString = "Something else";
 
-        const std::size_t length = data.with_write_lock_held([&](std::string & value) noexcept {
+        data.with_write_lock_held([&](std::string& value) noexcept {
+            REQUIRE(detail::tracker.was_locked == true);
+
+            value = anotherString;
+        });
+
+        REQUIRE(*data.read_lock() == anotherString);
+        REQUIRE(detail::tracker.was_unlocked == true);
+    }
+
+    SECTION("Writing data using a lambda, returning something")
+    {
+        REQUIRE(detail::tracker.was_locked == false);
+        REQUIRE(detail::tracker.was_unlocked == false);
+
+        const std::string anotherString = "Something else";
+
+        const auto length = data.with_write_lock_held([&](std::string& value) noexcept {
             REQUIRE(detail::tracker.was_locked == true);
 
             value = anotherString;
@@ -423,7 +464,6 @@ TEST_CASE("Guarded with a boost::shared_mutex", "[Boost]")
 
         REQUIRE(length == anotherString.length());
         REQUIRE(*data.read_lock() == anotherString);
-
         REQUIRE(detail::tracker.was_unlocked == true);
     }
 }

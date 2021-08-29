@@ -454,14 +454,32 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique>
      *                                by const reference. Failure to do so will result in
      *                                compilation failure.
      *
-     * @returns The result of invoking the functor, provided that the functor returns something.
+     * @returns The result of invoking the functor.
      */
     template <typename CallableType>
-    [[nodiscard]] auto with_lock_held(CallableType&& callable) const
-        -> decltype(callable(std::declval<const DataType&>()))
+    [[nodiscard]] auto with_lock_held(CallableType&& callable) const -> std::enable_if_t<
+        !std::is_same_v<decltype(callable(std::declval<DataType&>())), void>,
+        decltype(callable(std::declval<DataType&>()))>
     {
         const auto proxy = lock();
         return callable(static_cast<const DerivedType*>(this)->m_data);
+    }
+
+    /**
+     * @brief Locks the underlying mutex, and then executes the passed in functor with the lock
+     * held.
+     *
+     * @param[in] callable            A callable type like a lambda, std::function, etc.
+     *                                This callable type should take its input parameter
+     *                                by const reference. Failure to do so will result in
+     *                                compilation failure.
+     */
+    template <typename CallableType>
+    auto with_lock_held(CallableType&& callable) const -> std::enable_if_t<
+        std::is_same_v<decltype(callable(std::declval<DataType&>())), void>, void>
+    {
+        const auto proxy = lock();
+        callable(static_cast<const DerivedType*>(this)->m_data);
     }
 };
 
@@ -622,14 +640,31 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared>
      *                                This callable type must take its input parameter
      *                                by reference; avoid taking input by value.
      *
-     * @returns The result of invoking the functor, provided that the functor returns something.
+     * @returns The result of invoking the functor.
      */
     template <typename CallableType>
-    [[nodiscard]] auto with_write_lock_held(CallableType&& callable)
-        -> decltype(callable(std::declval<DataType&>()))
+    [[nodiscard]] auto with_write_lock_held(CallableType&& callable) -> std::enable_if_t<
+        !std::is_same_v<decltype(callable(std::declval<DataType&>())), void>,
+        decltype(callable(std::declval<DataType&>()))>
     {
         const auto scopedGuard = write_lock();
         return callable(static_cast<DerivedType*>(this)->m_data);
+    }
+
+    /**
+     * @brief Grabs an exclusive lock on the underlying mutex, and then executes the passed in
+     * functor with the lock held.
+     *
+     * @param[in] callable            A callable type like a lambda, std::function, etc.
+     *                                This callable type must take its input parameter
+     *                                by reference; avoid taking input by value.
+     */
+    template <typename CallableType>
+    auto with_write_lock_held(CallableType&& callable) -> std::enable_if_t<
+        std::is_same_v<decltype(callable(std::declval<DataType&>())), void>, void>
+    {
+        const auto scopedGuard = write_lock();
+        callable(static_cast<DerivedType*>(this)->m_data);
     }
 
     /**
@@ -641,14 +676,32 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared>
      *                                by const reference. Failure to do so will result in
      *                                compilation failure.
      *
-     * @returns The result of invoking the functor, provided that the functor returns something.
+     * @returns The result of invoking the functor.
      */
     template <typename CallableType>
-    [[nodiscard]] auto with_read_lock_held(CallableType&& callable) const
-        -> decltype(callable(std::declval<const DataType&>()))
+    [[nodiscard]] auto with_read_lock_held(CallableType&& callable) const -> std::enable_if_t<
+        !std::is_same_v<decltype(callable(std::declval<DataType&>())), void>,
+        decltype(callable(std::declval<DataType&>()))>
     {
         const auto scopedGuard = read_lock();
         return callable(static_cast<const DerivedType*>(this)->m_data);
+    }
+
+    /**
+     * @brief Grabs a shared lock on the underlying mutex, and then executes the passed in
+     * functor with the lock held.
+     *
+     * @param[in] callable            A callable type like a lambda, std::function, etc.
+     *                                This callable type should take its input parameter
+     *                                by const reference. Failure to do so will result in
+     *                                compilation failure.
+     */
+    template <typename CallableType>
+    auto with_read_lock_held(CallableType&& callable) const -> std::enable_if_t<
+        std::is_same_v<decltype(callable(std::declval<DataType&>())), void>, void>
+    {
+        const auto scopedGuard = read_lock();
+        callable(static_cast<const DerivedType*>(this)->m_data);
     }
 };
 
