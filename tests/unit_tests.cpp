@@ -1,8 +1,8 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
-#include <boost/thread/shared_mutex.hpp>
 #include <boost/thread/recursive_mutex.hpp>
+#include <boost/thread/shared_mutex.hpp>
 
 #include <shared_mutex>
 
@@ -287,7 +287,54 @@ TEST_CASE("Simple sanity checks")
     }
 }
 
-TEST_CASE("Guarded with a std::mutex", "[Std]")
+TEST_CASE("Non-Const Guard using a std::mutex", "[Std]")
+{
+    const std::string sample = "Testing a std::mutex.";
+
+    using mutex_type = detail::wrapped_unique_mutex<std::mutex>;
+    mutex_guarded<std::string, mutex_type> data{ sample };
+
+    SECTION("Locking")
+    {
+        REQUIRE(detail::tracker.was_locked == false);
+        REQUIRE(detail::tracker.was_unlocked == false);
+
+        REQUIRE(data.lock().is_locked());
+        REQUIRE(*data.lock() == sample);
+        REQUIRE(data.lock()->length() == sample.length());
+
+        REQUIRE(detail::tracker.was_locked == true);
+        REQUIRE(detail::tracker.was_unlocked == true);
+    }
+
+    SECTION("Data access using a lambda, returning nothing")
+    {
+        REQUIRE(detail::tracker.was_locked == false);
+        REQUIRE(detail::tracker.was_unlocked == false);
+
+        data.with_lock_held(
+            [](std::string& /*value*/) noexcept { REQUIRE(detail::tracker.was_locked == true); });
+
+        REQUIRE(detail::tracker.was_unlocked == true);
+    }
+
+    SECTION("Data access using a lambda, returning something")
+    {
+        REQUIRE(detail::tracker.was_locked == false);
+        REQUIRE(detail::tracker.was_unlocked == false);
+
+        const std::size_t length = data.with_lock_held([](std::string& value) noexcept {
+            REQUIRE(detail::tracker.was_locked == true);
+
+            return value.length();
+        });
+
+        REQUIRE(length == sample.length());
+        REQUIRE(detail::tracker.was_unlocked == true);
+    }
+}
+
+TEST_CASE("Const Guard using a std::mutex", "[Std]")
 {
     const std::string sample = "Testing a std::mutex.";
 
@@ -538,7 +585,7 @@ TEST_CASE("Const-Correctness")
     }
 }
 
-TEST_CASE("Unique Timed Mutex without Contention")
+TEST_CASE("Non-Const Guard with Unique Timed Mutex and no Contention")
 {
     const std::string sample = "Testing a std::timed_mutex.";
 
@@ -575,7 +622,7 @@ TEST_CASE("Unique Timed Mutex without Contention")
         REQUIRE(detail::tracker.was_unlocked == true);
     }
 
-    SECTION("Writing data using a lambda that returns something")
+    SECTION("Reading data using a lambda that returns something")
     {
         REQUIRE(detail::tracker.was_locked == false);
         REQUIRE(detail::tracker.was_unlocked == false);
@@ -605,7 +652,7 @@ TEST_CASE("Unique Timed Mutex without Contention")
         const std::string anotherString = "Something else";
 
         const auto wasLocked = data.try_with_lock_held_for(
-            std::chrono::milliseconds{ 10 }, [&](std::string & value) noexcept {
+            std::chrono::milliseconds{ 10 }, [&](std::string& value) noexcept {
                 REQUIRE(detail::tracker.was_locked == true);
 
                 wasLambdaInvoked = true;
@@ -617,6 +664,64 @@ TEST_CASE("Unique Timed Mutex without Contention")
         REQUIRE(detail::tracker.was_unlocked == true);
 
         REQUIRE(*data.lock() == anotherString);
+    }
+}
+
+TEST_CASE("Const Guard with Unique Timed Mutex and no Contention")
+{
+    const std::string sample = "Testing a std::timed_mutex.";
+
+    using start_locked = std::false_type;
+    using mutex_type = detail::wrapped_unique_and_timed_mutex<std::timed_mutex, start_locked>;
+
+    const mutex_guarded<std::string, mutex_type> data{ sample };
+
+    SECTION("Basic non-timed locking")
+    {
+        REQUIRE(detail::tracker.was_locked == false);
+        REQUIRE(detail::tracker.was_unlocked == false);
+
+        REQUIRE(data.lock().is_locked());
+        REQUIRE(*data.lock() == sample);
+        REQUIRE(data.lock()->length() == sample.length());
+
+        REQUIRE(detail::tracker.was_locked == true);
+        REQUIRE(detail::tracker.was_unlocked == true);
+    }
+
+    SECTION("Basic timed locking")
+    {
+        REQUIRE(detail::tracker.was_locked == false);
+        REQUIRE(detail::tracker.was_unlocked == false);
+
+        constexpr auto timeout = std::chrono::milliseconds{ 10 };
+
+        REQUIRE(data.try_lock_for(timeout).is_locked());
+        REQUIRE(*data.try_lock_for(timeout) == sample);
+        REQUIRE(data.try_lock_for(timeout)->length() == sample.length());
+
+        REQUIRE(detail::tracker.was_locked == true);
+        REQUIRE(detail::tracker.was_unlocked == true);
+    }
+
+    SECTION("Reading data using a lambda that returns something")
+    {
+        REQUIRE(detail::tracker.was_locked == false);
+        REQUIRE(detail::tracker.was_unlocked == false);
+
+        auto wasLambdaInvoked = false;
+
+        const std::optional<std::size_t> length = data.try_with_lock_held_for(
+            std::chrono::milliseconds{ 10 }, [&](const std::string& value) noexcept {
+                REQUIRE(detail::tracker.was_locked == true);
+
+                wasLambdaInvoked = true;
+                return value.length();
+            });
+
+        REQUIRE(length.has_value());
+        REQUIRE(wasLambdaInvoked == true);
+        REQUIRE(detail::tracker.was_unlocked == true);
     }
 }
 
@@ -671,7 +776,7 @@ TEST_CASE("Unique Timed Mutex with Contention")
         const std::string anotherString = "Something else";
 
         const auto wasLocked = data.try_with_lock_held_for(
-            std::chrono::milliseconds{ 10 }, [&](std::string & value) noexcept {
+            std::chrono::milliseconds{ 10 }, [&](std::string& value) noexcept {
                 wasLambdaInvoked = true;
                 value = anotherString;
             });
@@ -739,7 +844,7 @@ TEST_CASE("Shared Timed Mutex without Contention")
         const std::string anotherString = "Something else";
 
         const auto wasLocked = data.try_with_write_lock_held_for(
-            std::chrono::milliseconds{ 10 }, [&](std::string & value) noexcept {
+            std::chrono::milliseconds{ 10 }, [&](std::string& value) noexcept {
                 wasLambdaInvoked = true;
                 value = anotherString;
             });

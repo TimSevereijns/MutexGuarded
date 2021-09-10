@@ -185,9 +185,10 @@ template <> struct mutex_tagger<true, true, true, true>
 
 template <typename MutexType>
 using detect_mutex_category = typename mutex_tagger<
-    traits::is_mutex<MutexType>::value, traits::is_shared_mutex<MutexType>::value,
-    traits::is_timed_mutex<MutexType>::value,
-    traits::is_timed_shared_mutex<MutexType>::value>::type;
+    traits::is_mutex<MutexType>::value, //< E.g., std::mutex
+    traits::is_shared_mutex<MutexType>::value, //< E.g., std::shared_mutex 
+    traits::is_timed_mutex<MutexType>::value, //< E.g., std::timed_mutex
+    traits::is_timed_shared_mutex<MutexType>::value>::type; //< E.g., std::shared_timed_mutex
 
 /**
  * @brief Mutex traits, as derived from the detected functionality of the mutex.
@@ -435,14 +436,32 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique>
      *                                This callable type must take its input parameter
      *                                by reference; avoid taking input by value.
      *
-     * @returns The result of invoking the functor, provided that the functor returns something.
+     * @returns The result of invoking the functor.
      */
     template <typename CallableType>
-    [[nodiscard]] auto with_lock_held(CallableType&& callable)
-        -> decltype(callable(std::declval<DataType&>()))
+    [[nodiscard]] auto with_lock_held(CallableType&& callable) -> std::enable_if_t<
+        !std::is_same_v<decltype(callable(std::declval<DataType&>())), void>,
+        decltype(callable(std::declval<DataType&>()))>
     {
-        const auto proxy = lock();
+        const auto guard = lock();
         return callable(static_cast<DerivedType*>(this)->m_data);
+    }
+
+    /**
+     * @brief Locks the underlying mutex, and then executes the passed in functor with the lock
+     * held.
+     *
+     * @param[in] callable            A callable type like a lambda, std::function, etc.
+     *                                This callable type should take its input parameter
+     *                                by const reference. Failure to do so will result in
+     *                                compilation failure.
+     */
+    template <typename CallableType>
+    auto with_lock_held(CallableType&& callable) -> std::enable_if_t<
+        std::is_same_v<decltype(callable(std::declval<DataType&>())), void>, void>
+    {
+        const auto guard = lock();
+        callable(static_cast<DerivedType*>(this)->m_data);
     }
 
     /**
@@ -461,7 +480,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique>
         !std::is_same_v<decltype(callable(std::declval<DataType&>())), void>,
         decltype(callable(std::declval<DataType&>()))>
     {
-        const auto proxy = lock();
+        const auto guard = lock();
         return callable(static_cast<const DerivedType*>(this)->m_data);
     }
 
@@ -478,7 +497,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique>
     auto with_lock_held(CallableType&& callable) const -> std::enable_if_t<
         std::is_same_v<decltype(callable(std::declval<DataType&>())), void>, void>
     {
-        const auto proxy = lock();
+        const auto guard = lock();
         callable(static_cast<const DerivedType*>(this)->m_data);
     }
 };
@@ -560,8 +579,8 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_a
         -> std::enable_if_t<
             std::is_same_v<decltype(callable(std::declval<DataType&>())), void>, bool>
     {
-        const auto proxy = try_lock_for(timeout);
-        if (proxy.is_locked()) {
+        const auto guard = try_lock_for(timeout);
+        if (guard.is_locked()) {
             callable(static_cast<DerivedType*>(this)->m_data);
             return true;
         }
@@ -589,9 +608,63 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_a
             !std::is_same_v<decltype(callable(std::declval<DataType&>())), void>,
             std::optional<decltype(callable(std::declval<DataType&>()))>>
     {
-        const auto proxy = try_lock_for(timeout);
-        if (proxy.is_locked()) {
+        const auto guard = try_lock_for(timeout);
+        if (guard.is_locked()) {
             return callable(static_cast<DerivedType*>(this)->m_data);
+        }
+
+        return {};
+    }
+
+        /**
+     * @brief Executes the functor only if the mutex can be locked before the timer expires.
+     *
+     * This function will be enabled if the functor's return type is void.
+     *
+     * @param[in] timeout             The length of time to wait before abandoning the lock
+     *                                attempt.
+     * @param[in] callable            The functor to be invoked once the underlying mutex has
+     *                                been locked.
+     *
+     * @returns True if a lock was acquired on the mutex; false otherwise.
+     */
+    template <typename ChronoType, typename CallableType>
+    [[nodiscard]] auto try_with_lock_held_for(const ChronoType& timeout, CallableType&& callable) const
+        -> std::enable_if_t<
+            std::is_same_v<decltype(callable(std::declval<DataType&>())), void>, bool>
+    {
+        const auto guard = try_lock_for(timeout);
+        if (guard.is_locked()) {
+            callable(static_cast<const DerivedType*>(this)->m_data);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @brief Executes the functor only if the mutex can be locked before the timer expires.
+     *
+     * This function will be enabled if the functor's return type is not void.
+     *
+     * @param[in] timeout             The length of time to wait before abandoning the lock
+     *                                attempt.
+     * @param[in] callable            The functor to be invoked once the underlying mutex has
+     *                                been locked.
+     *
+     * @returns An optional containing the result of invoking the functor if a lock on the
+     * mutex was obtained. If the lock could not be obtained, an empty optional is returned
+     * instead.
+     */
+    template <typename ChronoType, typename CallableType>
+    [[nodiscard]] auto try_with_lock_held_for(const ChronoType& timeout, CallableType&& callable) const
+        -> std::enable_if_t<
+            !std::is_same_v<decltype(callable(std::declval<DataType&>())), void>,
+            std::optional<decltype(callable(std::declval<DataType&>()))>>
+    {
+        const auto guard = try_lock_for(timeout);
+        if (guard.is_locked()) {
+            return callable(static_cast<const DerivedType*>(this)->m_data);
         }
 
         return {};
@@ -647,7 +720,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared>
         !std::is_same_v<decltype(callable(std::declval<DataType&>())), void>,
         decltype(callable(std::declval<DataType&>()))>
     {
-        const auto scopedGuard = write_lock();
+        const auto guard = write_lock();
         return callable(static_cast<DerivedType*>(this)->m_data);
     }
 
@@ -663,7 +736,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared>
     auto with_write_lock_held(CallableType&& callable) -> std::enable_if_t<
         std::is_same_v<decltype(callable(std::declval<DataType&>())), void>, void>
     {
-        const auto scopedGuard = write_lock();
+        const auto guard = write_lock();
         callable(static_cast<DerivedType*>(this)->m_data);
     }
 
@@ -683,7 +756,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared>
         !std::is_same_v<decltype(callable(std::declval<DataType&>())), void>,
         decltype(callable(std::declval<DataType&>()))>
     {
-        const auto scopedGuard = read_lock();
+        const auto guard = read_lock();
         return callable(static_cast<const DerivedType*>(this)->m_data);
     }
 
@@ -700,7 +773,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared>
     auto with_read_lock_held(CallableType&& callable) const -> std::enable_if_t<
         std::is_same_v<decltype(callable(std::declval<DataType&>())), void>, void>
     {
-        const auto scopedGuard = read_lock();
+        const auto guard = read_lock();
         callable(static_cast<const DerivedType*>(this)->m_data);
     }
 };
@@ -798,8 +871,8 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
         -> std::enable_if_t<
             std::is_same_v<decltype(callable(std::declval<DataType&>())), void>, bool>
     {
-        const auto proxy = try_write_lock_for(timeout);
-        if (proxy.is_locked()) {
+        const auto guard = try_write_lock_for(timeout);
+        if (guard.is_locked()) {
             callable(static_cast<DerivedType*>(this)->m_data);
             return true;
         }
@@ -828,8 +901,8 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
             !std::is_same_v<decltype(callable(std::declval<DataType&>())), void>,
             std::optional<decltype(callable(std::declval<DataType&>()))>>
     {
-        const auto proxy = try_write_lock_for(timeout);
-        if (proxy.is_locked()) {
+        const auto guard = try_write_lock_for(timeout);
+        if (guard.is_locked()) {
             return callable(static_cast<DerivedType*>(this)->m_data);
         }
 
@@ -854,8 +927,8 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
         -> std::enable_if_t<
             std::is_same_v<decltype(callable(std::declval<const DataType&>())), void>, bool>
     {
-        const auto proxy = try_write_lock_for(timeout);
-        if (proxy.is_locked()) {
+        const auto guard = try_write_lock_for(timeout);
+        if (guard.is_locked()) {
             callable(static_cast<const DerivedType*>(this)->m_data);
             return true;
         }
@@ -884,8 +957,8 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
             !std::is_same_v<decltype(callable(std::declval<const DataType&>())), void>,
             std::optional<decltype(callable(std::declval<const DataType&>()))>>
     {
-        const auto proxy = try_read_lock_for(timeout);
-        if (proxy.is_locked()) {
+        const auto guard = try_read_lock_for(timeout);
+        if (guard.is_locked()) {
             return callable(static_cast<const DerivedType*>(this)->m_data);
         }
 
