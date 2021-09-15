@@ -185,9 +185,9 @@ template <> struct mutex_tagger<true, true, true, true>
 
 template <typename MutexType>
 using detect_mutex_category = typename mutex_tagger<
-    traits::is_mutex<MutexType>::value, //< E.g., std::mutex
-    traits::is_shared_mutex<MutexType>::value, //< E.g., std::shared_mutex 
-    traits::is_timed_mutex<MutexType>::value, //< E.g., std::timed_mutex
+    traits::is_mutex<MutexType>::value,                     //< E.g., std::mutex
+    traits::is_shared_mutex<MutexType>::value,              //< E.g., std::shared_mutex
+    traits::is_timed_mutex<MutexType>::value,               //< E.g., std::timed_mutex
     traits::is_timed_shared_mutex<MutexType>::value>::type; //< E.g., std::shared_timed_mutex
 
 /**
@@ -616,7 +616,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_a
         return {};
     }
 
-        /**
+    /**
      * @brief Executes the functor only if the mutex can be locked before the timer expires.
      *
      * This function will be enabled if the functor's return type is void.
@@ -629,7 +629,8 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_a
      * @returns True if a lock was acquired on the mutex; false otherwise.
      */
     template <typename ChronoType, typename CallableType>
-    [[nodiscard]] auto try_with_lock_held_for(const ChronoType& timeout, CallableType&& callable) const
+    [[nodiscard]] auto
+    try_with_lock_held_for(const ChronoType& timeout, CallableType&& callable) const
         -> std::enable_if_t<
             std::is_same_v<decltype(callable(std::declval<DataType&>())), void>, bool>
     {
@@ -657,7 +658,8 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_a
      * instead.
      */
     template <typename ChronoType, typename CallableType>
-    [[nodiscard]] auto try_with_lock_held_for(const ChronoType& timeout, CallableType&& callable) const
+    [[nodiscard]] auto
+    try_with_lock_held_for(const ChronoType& timeout, CallableType&& callable) const
         -> std::enable_if_t<
             !std::is_same_v<decltype(callable(std::declval<DataType&>())), void>,
             std::optional<decltype(callable(std::declval<DataType&>()))>>
