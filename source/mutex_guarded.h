@@ -326,7 +326,7 @@ template <
     typename BaseType,
     typename LockPolicyType =
         typename detail::mutex_traits<typename BaseType::mutex_type>::category_type>
-class lock_proxy
+class [[nodiscard]] lock_proxy
 {
   public:
     using value_type = typename BaseType::value_type;
@@ -359,27 +359,27 @@ class lock_proxy
         }
     }
 
-    [[nodiscard]] auto is_locked() const -> bool
+    auto is_locked() const -> bool
     {
         return m_base != nullptr;
     }
 
-    [[nodiscard]] auto operator->() noexcept -> pointer
+    auto operator->() noexcept -> pointer
     {
         return &m_base->m_data;
     }
 
-    [[nodiscard]] auto operator->() const noexcept -> const_pointer
+    auto operator->() const noexcept -> const_pointer
     {
         return &m_base->m_data;
     }
 
-    [[nodiscard]] auto operator*() noexcept -> reference
+    auto operator*() noexcept -> reference
     {
         return m_base->m_data;
     }
 
-    [[nodiscard]] auto operator*() const noexcept -> const_reference
+    auto operator*() const noexcept -> const_reference
     {
         return m_base->m_data;
     }
@@ -413,7 +413,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique>
      *
      * @returns An RAII proxy.
      */
-    [[nodiscard]] auto lock() -> unique_lock_proxy
+    auto lock() -> unique_lock_proxy
     {
         return { static_cast<DerivedType*>(this) };
     }
@@ -423,7 +423,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique>
      *
      * @returns An RAII proxy.
      */
-    [[nodiscard]] auto lock() const -> const_unique_lock_proxy
+    auto lock() const -> const_unique_lock_proxy
     {
         return { static_cast<const DerivedType*>(this) };
     }
@@ -524,7 +524,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_a
      *
      * @returns An RAII proxy.
      */
-    [[nodiscard]] auto lock() -> unique_lock_proxy
+    auto lock() -> unique_lock_proxy
     {
         return { static_cast<DerivedType*>(this) };
     }
@@ -534,7 +534,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_a
      *
      * @returns An RAII proxy.
      */
-    [[nodiscard]] auto lock() const -> const_unique_lock_proxy
+    auto lock() const -> const_unique_lock_proxy
     {
         return { static_cast<const DerivedType*>(this) };
     }
@@ -557,7 +557,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::unique_a
      * @returns An RAII proxy.
      */
     template <typename ChronoType>
-    [[nodiscard]] auto try_lock_for(const ChronoType& timeout) const -> const_timed_lock_proxy
+    auto try_lock_for(const ChronoType& timeout) const -> const_timed_lock_proxy
     {
         return { static_cast<const DerivedType*>(this), timeout };
     }
@@ -691,7 +691,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared>
      *
      * @returns An RAII proxy.
      */
-    [[nodiscard]] auto write_lock() -> unique_lock_proxy
+    auto write_lock() -> unique_lock_proxy
     {
         return { static_cast<DerivedType*>(this) };
     }
@@ -702,7 +702,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared>
      *
      * @returns An RAII proxy.
      */
-    [[nodiscard]] auto read_lock() const -> shared_lock_proxy
+    auto read_lock() const -> shared_lock_proxy
     {
         return { static_cast<const DerivedType*>(this) };
     }
@@ -803,7 +803,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
      *
      * @returns An RAII proxy.
      */
-    [[nodiscard]] auto write_lock() -> unique_lock_proxy
+    auto write_lock() -> unique_lock_proxy
     {
         return { static_cast<DerivedType*>(this) };
     }
@@ -814,7 +814,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
      *
      * @returns An RAII proxy.
      */
-    [[nodiscard]] auto read_lock() const -> shared_lock_proxy
+    auto read_lock() const -> shared_lock_proxy
     {
         return { static_cast<const DerivedType*>(this) };
     }
@@ -832,7 +832,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
      * @returns An RAII proxy.
      */
     template <typename ChronoType>
-    [[nodiscard]] auto try_write_lock_for(const ChronoType& timeout) -> timed_unique_lock_proxy
+    auto try_write_lock_for(const ChronoType& timeout) -> timed_unique_lock_proxy
     {
         return { static_cast<DerivedType*>(this), timeout };
     }
@@ -850,7 +850,7 @@ class mutex_guarded_impl<DerivedType, DataType, detail::mutex_category::shared_a
      * @returns An RAII proxy.
      */
     template <typename ChronoType>
-    [[nodiscard]] auto try_read_lock_for(const ChronoType& timeout) const -> timed_shared_lock_proxy
+    auto try_read_lock_for(const ChronoType& timeout) const -> timed_shared_lock_proxy
     {
         return { static_cast<const DerivedType*>(this), timeout };
     }
